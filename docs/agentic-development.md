@@ -56,7 +56,63 @@
 
 ---
 
-## Scope Note (this session)
+## Phase 1 — Infrastructure / Application Foundation
+
+- **Goal:** Create the containerized React + Express + MySQL skeleton: compose
+  topology, env contract, ignore files, minimal frontend placeholder, backend
+  health endpoint, Dockerfiles, lockfiles, and a clean boot verification.
+- **Agent:** Hermes (Nous Research) — same agentic-development partner.
+- **Prompt/Instruction Summary (human → agent):** "Planning has been reviewed
+  and approved for implementation to begin. You may now begin IMPLEMENTATION
+  PHASE 1 ONLY." Full Phase 1 scope: repository/application scaffolding,
+  frontend React+TS+Vite skeleton, backend Node+TS+Express skeleton, MySQL
+  service definition, Dockerfiles, root `compose.yml`, basic health endpoint,
+  minimal frontend placeholder, environment variable contract, ignore files,
+  build/start scripts, Docker networking/readiness, and documentation of
+  observable agentic work. Explicitly NO business functionality (no
+  auth/habits/goals/streaks/prisma/migrations/business tables).
+- **Actions:**
+  1. Read all 7 committed planning docs (source of truth) and verified git
+     state (main @ 2544b91, clean, origin synced).
+  2. Verified no host ports 3000/3001 in use and no containers running.
+  3. Wrote root files: `compose.yml` (db/backend/frontend, healthchecks,
+     named volume `db_data`, port 3000), `.env.example` (MySQL/JWT/port
+     placeholders), `.gitignore`, minimal `README.md`.
+  4. Backend scaffold: `package.json` (Express 5, TS), `tsconfig.json`
+     (strict), `src/app.ts` + `src/server.ts` + `src/routes/health.ts`
+     (`GET /api/health`), `Dockerfile` (multi-stage deps→build→run), lockfile.
+  5. Frontend scaffold: Vite + React 18 + TS, `src/main.tsx`, `src/App.tsx`
+     (placeholder + API health indicator), `src/index.css`, `index.html`,
+     `vite.config.ts` (dev proxy /api→backend), `Dockerfile` (node build →
+     nginx), `nginx.conf` (SPA + /api proxy), lockfile.
+  6. Generated lockfiles with host npm (v20 — engine-compatible with the
+     node:20 images; lockfile-v3 pins exact versions).
+- **Verification:**
+  - `docker compose config` — succeeds.
+  - `docker compose up --build -d` — all 3 services start.
+  - `docker compose ps` — db healthy, backend healthy, frontend up.
+  - `curl http://localhost:3000/api/health` → `{"status":"ok"}` (through the
+    nginx proxy, same-origin path).
+  - `curl http://localhost:3001/api/health` → same, direct backend.
+  - `curl http://localhost:3000/` → React app shell; the page fetches
+    `/api/health` and displays "API status: Healthy".
+  - `npm run build` (frontend) and `npm run typecheck` (backend) inside their
+    containers — both pass.
+  - MySQL container healthy; no business tables created (none expected).
+- **Human Decision:** Approved to start implementation after the planning root
+  commit ("Planning has been reviewed and approved for implementation to
+  begin").
+- **Deviations / Notes:**
+  - Health response is `{ "status": "ok" }` — architecture.md §8 specifies
+    `{ "status": "ok", "db": "up" }` once the DB layer exists; the `db` field
+    arrives with Prisma in Phase 2. Compose healthcheck only requires HTTP 200.
+  - No `entrypoint.sh` yet — the `prisma migrate deploy` step it will run
+    belongs to Phase 2; the backend Dockerfile runs `node dist/server.js`
+    directly for now.
+  - No `backend/prisma/` yet — Phase 2 creates the schema + committed
+    migrations.
+
+---
 
 This initial session was deliberately limited to:
 
