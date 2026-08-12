@@ -23,3 +23,13 @@ export function shiftDate(date: string, days: number): string {
   const ms = Date.UTC(y, m - 1, d) + days * 86_400_000;
   return new Date(ms).toISOString().slice(0, 10);
 }
+
+// Monday of the week containing `date` (week = Monday..Sunday calendar
+// dates, D3). Pure naive-DATE arithmetic on the UTC day number — the day
+// number is only a calendar index, never a time instant (D8, no clock).
+export function mondayOfWeek(date: string): string {
+  const dayNum = new Date(Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)))).getUTCDay();
+  // getUTCDay: 0=Sun..6=Sat → shift back to Monday (Mon=0..Sun=6).
+  const daysSinceMonday = (dayNum + 6) % 7;
+  return shiftDate(date, -daysSinceMonday);
+}

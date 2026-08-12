@@ -440,3 +440,82 @@ commit must exist before any application code.
   - This correction is recorded honestly as a post-implementation
     human-review fix; the original planning docs did NOT contain `startDate`/
     `refDate` as habit fields — they are the resolution of the audit.
+
+---
+
+## Phase 5B — Derived habit statistics (streak, weekly, clean streak)
+
+- **Goal:** Add derived habit statistics to the existing habit endpoints, computed
+  exclusively from source-of-truth DATE records with explicit calendar semantics
+  — no schema change, no stored counters, no server clock reads.
+- **Agent:** Hermes (Nous Research) — same agentic-development partner.
+- **Prompt/Instruction Summary (human → agent):** "Resume and CLOSE Phase 5B
+  only. Do NOT implement Phase 6. Do NOT rewrite or redo the already-green
+  Phase 5B implementation." Remaining scope: final verification, documentation,
+  commit, push — no new business logic.
+- **Contract (docs/api-contract.md §2):** stats live on the EXISTING
+  `GET /api/habits` and `GET /api/habits/:id` endpoints via required
+  `refDate=YYYY-MM-DD` query param — NOT a new `/api/habits/:id/stats` route.
+  Auth required (401 without token); foreign/nonexistent habit → 404 (D7);
+  malformed habit id → 404; invalid/missing refDate → 400 VALIDATION_ERROR;
+  refDate before startDate → 400 VALIDATION_ERROR (startDate is the business
+  floor — documented implementation interpretation). Response shapes: list
+  `{ habits: [{ ...habit, stats }] }`; detail `{ habit: { ...habit, stats,
+  completedDates, relapseDates } }`. BUILD stats: `currentStreak`,
+  `weekCompleted`, `weekElapsedDays`, `weekCompletionRate`, `missedDays`;
+  BREAK stats: `cleanStreak`, `lastRelapseDate`. `completedDates`/
+  `relapseDates` newest-first (descending).
+- **Actions:**
+  1. `backend/src/lib/dates.ts` — added `mondayOfWeek(date)`: pure UTC-day-number
+     arithmetic returning the Monday anchor of the week (no clock).
+  2. `backend/src/services/stats.ts` (NEW) — pure functions `currentStreak`,
+     `weeklyStats`, `cleanStreak`, deterministic from startDate/refDate/event
+     rows; zero clock reads. Contains the startDate-floor filter
+     (`if (r < startDate) continue;` before the lastRelapse check), so
+     pre-startDate relapses are meaningless history — never a reset, never
+     `lastRelapseDate`.
+  3. `backend/src/services/statsService.ts` (NEW) — assembly: validates refDate
+     format (400), ownership proven via `getOwnedHabit` BEFORE computing (D7;
+     foreign→404), fetches event rows, calls pure stats, returns
+     `completedDates`/`relapseDates` newest-first.
+  4. `backend/src/routes/habits.ts` — both GET routes parse required `refDate`
+     query param (invalid/missing → 400), attach `stats` (list & detail) +
+     `completedDates`/`relapseDates` (detail only).
+  5. `backend/test/stats.test.ts` (NEW) — 35-test matrix: pure-function tests
+     (streak edge cases, weekly boundary math, clean-streak semantics) + API
+     validation/ownership/shape tests. `backend/test/habits.test.ts` — the 5
+     pre-existing GET tests now pass required `?refDate=`; test-16 list-key
+     expectation updated to include `stats`.
+  6. Verification runs (canonical suite + smoke). First smoke iteration used
+     the WRONG HTTP verb (PUT) for the relapse mutation (endpoint is POST
+     `/relapses`); the corrected BREAK nginx smoke uses POST, confirms an
+     actual relapse row in MySQL, and asserts cleanStreak 0/1/2 across
+     refDate = relapse day / next day / two days later. Documented honestly
+     before commit.
+- **Verification (all actually run):**
+  - Canonical suite `docker compose -f compose.yml -f compose.test.yml run --rm
+    backend-test` → **88/88 passed** (35 stats, 22 tracking, 16 habits, 15
+    auth; Test Files 4). `npx tsc --noEmit` in the test container → exit 0.
+  - Backend + frontend images built; `docker compose config --quiet` OK;
+    health through nginx `200 {"status":"ok","db":"up"}`; frontend :3000 200.
+  - Corrected BREAK smoke through nginx :3000: register 201; BREAK habit
+    created with startDate 2026-08-17; POST `/relapses` 201; MySQL row
+    verified (`relapse_events`); stats GET → `cleanStreak 0` on relapse day,
+    `1` next day, `2` two days later, `lastRelapseDate 2026-08-19`;
+    throwaway user deleted (0 phase5b users remaining).
+  - BUILD smoke (prior run, stack through nginx): Mon✓ Tue✓ Wed✓ Thu✗ Fri✓
+    refDate Fri → `currentStreak 1`, week 4/5/1 rate 0.8; Mon✓–Thu✓ Fri
+    unfinished refDate Fri → `currentStreak 4`. No derived columns in MySQL
+    (information_schema query empty).
+- **Deviations / Notes:**
+  - `refDate < startDate` → 400 VALIDATION_ERROR (documented implementation
+    interpretation: an eligible range with a negative lower bound is
+    meaningless).
+  - No schema/migration change (migrations dir untouched — still 2
+    migrations). No stored streak/rate/missed counters; derivation is
+    read-time only.
+  - No system-clock reads in stats logic: `Date` objects exist only for
+    deterministic UTC-day-number arithmetic on explicit calendar strings;
+    `toISOString` only formats stored Prisma DATE values — never derives
+    "today" (D8).
+  - Phase 6 (goals) and all frontend business UI remain out of scope.

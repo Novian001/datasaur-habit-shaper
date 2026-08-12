@@ -7,6 +7,9 @@ const PASS = "testpass123";
 // A fixed calendar date used as the client-supplied habit startDate (D8).
 // Explicit string — the write-window tests never depend on the server clock.
 const START = "2026-08-10";
+// Client-supplied reference date for stats GETs (contract §2 requires
+// refDate on the habit list/detail endpoints; D8 — no server clock).
+const REF = "2026-08-12";
 
 // Controlled test DB (habit_shaper_test) — no production data. Reset per test.
 beforeEach(async () => {
@@ -97,16 +100,16 @@ describe("habits list", () => {
     await createHabit(a, "A-Two", "BREAK");
     await createHabit(b, "B-One", "BUILD");
 
-    const la = await request(app).get("/api/habits").set("Authorization", `Bearer ${a}`);
+    const la = await request(app).get(`/api/habits?refDate=${REF}`).set("Authorization", `Bearer ${a}`);
     expect(la.status).toBe(200);
     expect(la.body.habits.map((h: { name: string }) => h.name).sort()).toEqual(["A-One", "A-Two"]);
 
-    const lb = await request(app).get("/api/habits").set("Authorization", `Bearer ${b}`);
+    const lb = await request(app).get(`/api/habits?refDate=${REF}`).set("Authorization", `Bearer ${b}`);
     expect(lb.status).toBe(200);
     expect(lb.body.habits.map((h: { name: string }) => h.name)).toEqual(["B-One"]);
 
     const nobody = await registerUser("nobody@example.invalid");
-    const le = await request(app).get("/api/habits").set("Authorization", `Bearer ${nobody}`);
+    const le = await request(app).get(`/api/habits?refDate=${REF}`).set("Authorization", `Bearer ${nobody}`);
     expect(le.status).toBe(200);
     expect(le.body.habits).toEqual([]);
   });
@@ -125,28 +128,28 @@ describe("habits detail", () => {
   });
 
   it("12. owner can retrieve habit → 200", async () => {
-    const res = await request(app).get(`/api/habits/${aHabitId}`).set("Authorization", `Bearer ${a}`);
+    const res = await request(app).get(`/api/habits/${aHabitId}?refDate=${REF}`).set("Authorization", `Bearer ${a}`);
     expect(res.status).toBe(200);
     expect(res.body.habit.name).toBe("A-Habit");
     expect(res.body.habit.id).toBe(aHabitId);
   });
 
   it("13. foreign habit → 404 (uniform hiding, no 403)", async () => {
-    const res = await request(app).get(`/api/habits/${bHabitId}`).set("Authorization", `Bearer ${a}`);
+    const res = await request(app).get(`/api/habits/${bHabitId}?refDate=${REF}`).set("Authorization", `Bearer ${a}`);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("NOT_FOUND");
     // B accessing A's habit also 404
-    const res2 = await request(app).get(`/api/habits/${aHabitId}`).set("Authorization", `Bearer ${b}`);
+    const res2 = await request(app).get(`/api/habits/${aHabitId}?refDate=${REF}`).set("Authorization", `Bearer ${b}`);
     expect(res2.status).toBe(404);
   });
 
   it("14. nonexistent habit → 404", async () => {
-    const res = await request(app).get("/api/habits/999999").set("Authorization", `Bearer ${a}`);
+    const res = await request(app).get(`/api/habits/999999?refDate=${REF}`).set("Authorization", `Bearer ${a}`);
     expect(res.status).toBe(404);
   });
 
   it("15. malformed id handled per contract (404, not 500)", async () => {
-    const res = await request(app).get("/api/habits/abc").set("Authorization", `Bearer ${a}`);
+    const res = await request(app).get(`/api/habits/abc?refDate=${REF}`).set("Authorization", `Bearer ${a}`);
     expect(res.status).toBe(404);
   });
 });
@@ -156,13 +159,14 @@ describe("habits data safety", () => {
     const token = await registerUser("a@example.invalid");
     const created = await createHabit(token, "Safe", "BUILD");
     const id = created.body.habit.id;
-    for (const res of [created, await request(app).get(`/api/habits/${id}`).set("Authorization", `Bearer ${token}`)]) {
+    for (const res of [created, await request(app).get(`/api/habits/${id}?refDate=${REF}`).set("Authorization", `Bearer ${token}`)]) {
       expect(Object.keys(res.body.habit).sort()).toEqual(["createdAt", "id", "name", "startDate", "type"]);
       expect(JSON.stringify(res.body)).not.toContain("userId");
       expect(JSON.stringify(res.body)).not.toContain("password");
     }
-    const list = await request(app).get("/api/habits").set("Authorization", `Bearer ${token}`);
-    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt", "id", "name", "startDate", "type"]);
+    const list = await request(app).get(`/api/habits?refDate=${REF}`).set("Authorization", `Bearer ${token}`);
+    // List items carry computed stats per contract §2 (habit fields + stats).
+    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt", "id", "name", "startDate", "stats", "type"]);
   });
 });
 
