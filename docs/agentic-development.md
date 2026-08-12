@@ -127,3 +127,76 @@ and intentionally did **NOT** implement source code — no React scaffold, no
 Node scaffold, no Prisma schema, no migrations, no Dockerfiles, no compose.yml,
 no package.json. The planning-first rule (R27) is preserved: the planning
 commit must exist before any application code.
+
+---
+
+## Phase 2 — Database Model and Migration
+
+- **Goal:** Implement the approved relational model (docs/data-model.md §2–3) and
+  automatic schema bootstrap via committed Prisma migrations.
+- **Agent:** Hermes (Nous Research) — same agentic-development partner.
+- **Prompt/Instruction Summary (human → agent):** "Proceed with IMPLEMENTATION
+  PHASE 2 ONLY: DATABASE MODEL + PRISMA + INITIAL MIGRATION." Scope: Prisma
+  installation/configuration, schema, enums/models/relations, constraints,
+  initial migration, automatic `migrate deploy` on container start, DB
+  readiness verification, DB-focused checks. Explicitly NO auth/JWT/hashing/
+  habit/goal/tracking routes, no streak/stat logic, no frontend business UI.
+- **Actions:**
+  1. Verified repo state (main @ 7141340, clean, origin synced) and re-read all
+     7 planning docs — data-model.md matched the prompt shorthand; no conflicts.
+  2. Added Prisma 7.9.1 (`prisma` devDep, `@prisma/client` + `dotenv` deps),
+     regenerated `package-lock.json`.
+  3. Wrote `backend/prisma/schema.prisma` — models User, Habit, HabitCompletion,
+     RelapseEvent, Goal; enum HabitType (BUILD/BREAK); snake_case `@map`;
+     `@db.Date` on completion/relapse dates (D8); `@db.UnsignedInt` PKs/FKs;
+     UNIQUE(email), UNIQUE(habit_id,date), UNIQUE(habit_id,relapse_date);
+     FK ON DELETE CASCADE; index (user_id) on habits/goals.
+  4. Prisma 7 moved datasource URL out of schema → wrote `backend/prisma.config.ts`
+     (DATABASE_URL from env); removed the schema `url` line.
+  5. `prisma validate` → valid; `prisma generate` → client to
+     `src/generated/prisma` (gitignored); added `src/generated/` to
+     `backend/.gitignore`; tsconfig excludes it (build-time only).
+  6. Generated initial migration via containerized `prisma migrate diff
+     --from-empty --to-schema` → `backend/prisma/migrations/
+     20260812002034_init_habit_schema/migration.sql` (+ `migration_lock.toml`).
+     Reviewed the SQL: 5 tables, all constraints exactly per data-model.md;
+     no manual edits.
+  7. Dockerfile: copy `prisma/` + `prisma.config.ts` before `npm ci` (Prisma 7
+     auto-generates client at install), run `entrypoint.sh`. New
+     `backend/entrypoint.sh`: `npx prisma migrate deploy` → `node dist/server.js`.
+  8. Health endpoint: kept `{ status: "ok" }` (see deviation below).
+  9. Rebuilt backend image, recreated container. Entrypoint logs show
+     "All migrations have been successfully applied" → "listening on :3000".
+- **Verification (actual):**
+  - `prisma validate` → "The schema at prisma/schema.prisma is valid".
+  - `prisma generate` → client generated.
+  - `prisma migrate deploy` (entrypoint, container start) → applied
+    `20260812002034_init_habit_schema`, "All migrations have been successfully
+    applied".
+  - `SHOW CREATE TABLE` on MySQL: users (email UNIQUE, password_hash),
+    habits (type ENUM('BUILD','BREAK'), user_id FK CASCADE, idx user_id),
+    habit_completions (`date DATE`, UNIQUE(habit_id,date), FK CASCADE),
+    relapse_events (`relapse_date DATE`, UNIQUE(habit_id,relapse_date)),
+    goals (title, nullable description, FKs CASCADE) — all per data-model.md.
+  - Ad-hoc probe script (Temp, `hermes-verify-phase2.sh`, since removed):
+    19/19 checks — 6 tables present, DATE column types, all UNIQUE/index/FK
+    constraints, integrity probes (duplicate email / completion / relapse
+    rejected, invalid FK rejected), probe data cleaned up.
+  - Backend image build (`npm run build` = tsc) succeeds.
+- **Human Decision:** Phase 1 reviewed and Phase 2 approved ("Phase 1 has
+  passed human review. Proceed with IMPLEMENTATION PHASE 2 ONLY").
+- **Deviations / Notes:**
+  - Health stays `{ status: "ok" }` — architecture.md §8's `db: "up"` field
+    requires a Prisma runtime DB check, and Prisma 7's client needs a driver
+    adapter (`@prisma/adapter-mysql`) for runtime use. Adding that dependency
+    was declined; the `db` field is deferred to the phase that first uses
+    Prisma at runtime (Phase 3+). Compose healthcheck only requires HTTP 200.
+  - Migration directory named `20260812002034_init_habit_schema` (Prisma's
+    timestamp convention) rather than task-breakdown.md's placeholder
+    `0001_init` — naming only, same content.
+  - Runtime image installs full deps (`npm ci`, not `--omit=dev`) so
+    `npx prisma migrate deploy` works in the entrypoint (prisma is a devDep).
+    This honors R20 (automatic bootstrap) at the cost of a slightly larger
+    image — acceptable for a local test app.
+  - Prisma 7 config lives in `backend/prisma.config.ts` (new file) — the
+    datasource URL moved out of schema.prisma in v7.

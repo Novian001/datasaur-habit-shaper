@@ -1,0 +1,84 @@
+// Prisma schema for Habit Shaper (MySQL 8). Source of truth: docs/data-model.md §2–3.
+// Dates are naive calendar DATEs (D8). Streaks are derived, never stored (§1).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id           Int               @id @default(autoincrement()) @db.UnsignedInt
+  email        String            @unique @db.VarChar(255)
+  passwordHash String            @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+
+  habits Habit[]
+  goals  Goal[]
+
+  @@map("users")
+}
+
+model Habit {
+  id        Int       @id @default(autoincrement()) @db.UnsignedInt
+  userId    Int       @map("user_id") @db.UnsignedInt
+  name      String    @db.VarChar(120)
+  type      HabitType
+  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions   HabitCompletion[]
+  relapses      RelapseEvent[]
+  goals         Goal[]
+
+  @@index([userId])
+  @@map("habits")
+}
+
+enum HabitType {
+  BUILD
+  BREAK
+}
+
+model HabitCompletion {
+  id        Int      @id @default(autoincrement()) @db.UnsignedInt
+  habitId   Int      @map("habit_id") @db.UnsignedInt
+  date      DateTime @db.Date
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@map("habit_completions")
+}
+
+model RelapseEvent {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  habitId     Int      @map("habit_id") @db.UnsignedInt
+  relapseDate DateTime @map("relapse_date") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, relapseDate])
+  @@map("relapse_events")
+}
+
+model Goal {
+  id          Int      @id @default(autoincrement()) @db.UnsignedInt
+  userId      Int      @map("user_id") @db.UnsignedInt
+  habitId     Int      @map("habit_id") @db.UnsignedInt
+  title       String   @db.VarChar(200)
+  description String?  @db.VarChar(1000)
+  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(3)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("goals")
+}
