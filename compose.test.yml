@@ -1,0 +1,20 @@
+# Test-only override: runs the backend auth suite against a dedicated test
+# database (habit_shaper_test) inside the same MySQL container. Not used by
+# the normal stack — `docker compose -f compose.yml -f compose.test.yml run --rm backend-test`.
+# Prerequisite (one-time): the test DB exists and habit_user has grants —
+#   docker compose exec -T db mysql -uroot -p$MYSQL_ROOT_PASSWORD -e \
+#     "CREATE DATABASE IF NOT EXISTS habit_shaper_test; GRANT ALL PRIVILEGES ON habit_shaper_test.* TO 'habit_user'@'%'; FLUSH PRIVILEGES;"
+name: datasaur-habit-shaper
+
+services:
+  backend-test:
+    build:
+      context: ./backend
+      target: build   # build stage: full deps incl. devDeps (vitest, supertest)
+    environment:
+      DATABASE_URL: mysql://${MYSQL_USER:-habit_user}:${MYSQL_PASSWORD:-habit_password}@db:3306/habit_shaper_test
+      JWT_SECRET: test-jwt-secret-0123456789abcdef
+    command: sh -c "npx prisma migrate deploy && npm test"
+    depends_on:
+      db:
+        condition: service_healthy

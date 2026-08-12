@@ -200,3 +200,76 @@ commit must exist before any application code.
     image — acceptable for a local test app.
   - Prisma 7 config lives in `backend/prisma.config.ts` (new file) — the
     datasource URL moved out of schema.prisma in v7.
+
+---
+
+## Phase 3 — Authentication (email + password)
+
+- **Goal:** Implement the authentication boundary required by the coding test:
+  register/login with email+password, bcrypt hashing, JWT, authenticated
+  current-user endpoint, auth middleware, request validation, consistent
+  auth errors, automated auth tests, Docker verification. No business
+  features (habits, completions, relapses, streaks, stats, goals, UI).
+- **Actions:**
+  - Validation (`lib/validation.ts`): Zod schemas — email format + lowercase
+    normalization, password min 8 / max 128 chars (api-contract.md).
+  - Password hashing (`services/password.ts`): bcryptjs, cost 10.
+  - JWT (`lib/jwt.ts`): `{ sub: userId, email }`, expiry 7d, secret from
+    `JWT_SECRET` env — required at runtime, fail-fast (no built-in default).
+  - Auth middleware (`middleware/auth.ts`): Bearer scheme → verify → attach
+    `req.userId`; missing/invalid/expired → 401.
+  - Routes (`routes/auth.ts`): `POST /api/auth/register` (201 + token),
+    `POST /api/auth/login` (200 + token), `GET /api/auth/me` (Bearer).
+    Duplicate email → 409; bad credentials → 401 generic (no enumeration).
+  - Error handler (`middleware/errorHandler.ts`): uniform
+    `{ error: { code, message } }`; never leaks stack/Prisma/SQL.
+  - `app.ts` mounts auth under `/api/auth` (nginx exposes `/api`); `server.ts`
+    fails fast if `JWT_SECRET` missing. Health endpoint now reports
+    `{ status: "ok", db: "up" }` via Prisma `SELECT 1`.
+  - Tests (`test/auth.test.ts`): Vitest + Supertest against the real app +
+    dedicated `habit_shaper_test` DB (compose test service, `compose.test.yml`).
+  - Env contract: `.env.example` `JWT_SECRET=dev-insecure-jwt-secret-change-me`
+    (placeholder); compose passes `JWT_SECRET` to backend.
+  - Prisma 7 build/config fixes: generated client requires explicit output
+    (kept `src/generated/prisma`), driver adapter is `@prisma/adapter-mariadb`
+    (Prisma 7 renamed the MySQL adapter), backend runs as ESM
+    (`"type": "module"` — generated client uses `import.meta`), Dockerfile
+    runs `npx prisma generate` and copies `src/generated` to the runtime stage.
+- **Verification (actual):**
+  - `docker compose config` (both files) → OK.
+  - Backend image build (`npm run build` = tsc) → succeeds.
+  - `docker compose ps` → db healthy, backend healthy, frontend running.
+  - `GET :3000/api/health` → `{"status":"ok","db":"up"}` (was `{status:"ok"}`
+    in Phase 2 — the deferred `db` check is now live).
+  - Smoke tests via nginx proxy (:3000): register → 201 (user + token);
+    duplicate register → 409 `CONFLICT`; login → 200 (token); `/auth/me`
+    with Bearer → 200 correct user; `/auth/me` without token → 401; wrong
+    password → 401 `Invalid email or password`; unknown email → 401 identical
+    message (no enumeration).
+  - DB evidence: `users` row for smoke account — email lowercase,
+    `password_hash` bcrypt `$2a$10$` prefix, len 60, `password_hash !=
+    submitted password` (is_plaintext=0), no plaintext password column.
+    Smoke account deleted after verification (0 rows remain).
+  - Automated tests: `docker compose -f compose.yml -f compose.test.yml run
+    --rm backend-test` → **15/15 passed** (register 201; invalid email 400;
+    short password 400; duplicate 409; hash stored not plaintext; login 200;
+    wrong password 401; unknown email 401 same message; no passwordHash in
+    responses; no token 401; malformed token 401; expired token 401;
+    invalid-signature token 401; `/auth/me` 200 correct user; email
+    lowercase-normalized).
+  - Regression: frontend :3000 → 200 (SPA title "Habit Shaper"), health 200,
+    migration `20260812002034_init_habit_schema` applied, 6 tables intact.
+- **Human Decision:** Phase 2 reviewed; authentication phase approved
+  ("Phase 2 has passed human review. Proceed with IMPLEMENTATION PHASE 3
+  ONLY").
+- **Deviations / Notes:**
+  - `@prisma/adapter-mysql` does not exist on npm in Prisma 7 — the MySQL
+    driver adapter is `@prisma/adapter-mariadb` (supports MySQL).
+  - Prisma 7's `prisma-client` generator requires an explicit `output` path
+    (kept Phase 2's `src/generated/prisma`); the generated client is ESM
+    (`import.meta.url`), so the backend now runs as ESM (`"type": "module"`).
+  - The Phase 2 deferred restart/migrate-deploy idempotence check could not
+    be executed this phase either (container restart mutation still denied);
+    it remains deferred to final clean-room verification (testing-strategy §6).
+  - The previously-deferred `db: "up"` health field is now implemented
+    (resolves the Phase 2 deviation).

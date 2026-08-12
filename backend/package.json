@@ -2,6 +2,7 @@
   "name": "habit-shaper-backend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Habit Shaper REST API (Express 5 + TypeScript)",
   "main": "dist/server.js",
   "scripts": {
@@ -9,21 +10,31 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma": "prisma",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@prisma/adapter-mariadb": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "bcryptjs": "^2.4.3",
     "dotenv": "^17.4.2",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.2",
+    "@types/supertest": "^6.0.2",
     "prisma": "^7.9.1",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^3.0.5"
   }
 }
