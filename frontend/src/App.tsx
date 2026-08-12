@@ -1,30 +1,77 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AppShell from "./components/AppShell";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
-type Health = { status: string };
+// Authenticated users visiting /login or /register are redirected to the
+// protected shell (STEP 8). Implemented with a tiny wrapper instead of
+// conditional children so the redirect stays at route level.
+function PublicOnly({ children }: { children: React.ReactNode }) {
+  const { user, bootstrapping } = useAuth();
+  const location = useLocation();
+
+  // While a stored token is being validated, don't flash the auth pages.
+  if (bootstrapping) {
+    return <div className="page-loading">Checking your session…</div>;
+  }
+  if (user) {
+    const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
+    return <Navigate to={from && from !== "/login" && from !== "/register" ? from : "/"} replace />;
+  }
+  return <>{children}</>;
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <PublicOnly>
+            <Login />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/register"
+        element={
+          <PublicOnly>
+            <Register />
+          </PublicOnly>
+        }
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <AppShell />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+// Keeps the scroll position sane when navigating between pages.
+function ScrollReset() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/health")
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data: Health) => setHealth(data))
-      .catch(() => setError(true));
-  }, []);
-
-  const apiState =
-    error ? "Unreachable"
-    : health ? (health.status === "ok" ? "Healthy" : health.status)
-    : "Checking…";
-
   return (
-    <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem" }}>
-      <h1>Habit Shaper</h1>
-      <p>Application foundation is running.</p>
-      <p>
-        API status: <strong>{apiState}</strong>
-      </p>
-    </main>
+    <AuthProvider>
+      <ScrollReset />
+      <div className="app">
+        <AppRoutes />
+      </div>
+    </AuthProvider>
   );
 }

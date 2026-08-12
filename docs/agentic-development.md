@@ -577,3 +577,85 @@ commit must exist before any application code.
     null as a valid value); empty `{}` PATCH is a no-op update (strict mode).
   - No schema/migration change (Goal model from Phase 2 already matches the
     contract). No frontend goal UI — Phase 7+ pending human review.
+
+---
+
+## Phase 7 — Frontend authentication
+
+- **Goal:** provide the registration/login/session-bootstrap/logout frontend
+  flow over the committed API contract (§1), with a protected application
+  shell proving route guarding — and nothing more.
+- **Human Decision:** backend feature set (auth, habits, tracking, stats,
+  goals) reviewed and approved before frontend implementation.
+- **Actions:**
+  1. `frontend/src/api/client.ts` (NEW) — thin fetch wrapper: relative `/api`
+     paths (same-origin via nginx in prod, Vite dev proxy), attaches
+     `Authorization: Bearer <token>` when authenticated, parses the uniform
+     `{ error: { code, message } }` shape into a typed `ApiClientError`,
+     never logs tokens/passwords, safe generic message on non-JSON/unexpected
+     responses.
+  2. `frontend/src/context/AuthContext.tsx` (NEW) — auth state (user, token,
+     bootstrapping), login/register/logout actions, `/api/auth/me` bootstrap
+     on startup with stored token; invalid/expired token → cleared + logged
+     out. JWT persisted in `localStorage` (architecture.md §3 approved
+     tradeoff). No Redux — React context only.
+  3. `frontend/src/pages/Login.tsx`, `frontend/src/pages/Register.tsx` (NEW)
+     — email + password forms, client-side required validation (backend is
+     the source of truth), loading states, safe backend error display,
+     cross-links between pages. Register persists the returned token
+     (contract: register returns `{ user, token }`).
+  4. `frontend/src/components/ProtectedRoute.tsx` (NEW) — auth guard:
+     unauthenticated → redirect `/login`; bootstrapping → loading state (no
+     flash of the auth page).
+  5. `frontend/src/components/AppShell.tsx` (NEW) — minimal protected shell:
+     brand, `Welcome, <email>`, Logout button, "Dashboard features coming
+     next" placeholder. No habit/goal/streak UI.
+  6. `frontend/src/lib/date.ts` (NEW) — `todayLocal()` producing local
+     calendar `YYYY-MM-DD` via `getFullYear/getMonth/getDate` (D8; never
+     `toISOString().slice(0,10)`). Only foundation for Phase 8 — no tracking
+     UI uses it yet.
+  7. `frontend/src/App.tsx` — routes `/login`, `/register` (public-only;
+     authenticated users redirect to `/`), `/` (protected shell). `main.tsx`
+     adds `BrowserRouter`.
+  8. `frontend/src/index.css` — clean responsive styling (system font stack,
+     auth card, shell header, buttons, loading state, 480px breakpoint). No
+     UI framework added (STEP 2 — React + TS + Vite + plain CSS only).
+  9. `frontend/src/test/auth-flow.test.tsx` (NEW, 10 tests) + test setup —
+     Vitest + jsdom + Testing Library. Covers: login form renders, register
+     form renders, valid registration → protected shell, valid login →
+     protected shell, invalid login shows safe error, authenticated user
+     reaches shell, `/api/auth/me` bootstrap restores session after reload,
+     invalid stored token → logged out, logout clears session, protected
+     route inaccessible while unauthenticated. Fetch stubbed in-memory with
+     synthetic tokens (no real credentials committed).
+- **Verification (all actually run):**
+  - Frontend: `npx tsc --noEmit` clean; `npm run build` (tsc + vite) clean
+    (40 modules); `npm test` → **10/10 passed** (jsdom, 1 file).
+  - Canonical backend suite `docker compose -f compose.yml -f
+    compose.test.yml run --rm backend-test` → **114/114 passed** (5 files) —
+    unchanged, no backend modifications.
+  - Images: `docker compose build frontend` + `backend` OK; `docker compose
+    config --quiet` OK. Stack through nginx :3000: health 200
+    `{"status":"ok","db":"up"}`; SPA shell 200 at `/` and `/login` deep link.
+  - API-level smoke through nginx (:3000, throwaway user, cleaned): register
+    201 + token, `/auth/me` 200, no-token 401, wrong-password 401 with
+    generic message, duplicate register 409, login 200 + token, client-side
+    logout semantics (token remains server-valid; app clears storage per
+    contract — no backend logout endpoint), shell serves SPA.
+  - Browser-automation limitation (documented honestly): the sandboxed
+    browser has no network egress (even example.com fails), so live
+    browser-driven E2E was not possible in this environment; the 10-behavior
+    matrix is covered deterministically by the jsdom tests + the nginx
+    API-level smoke above. Throwaway users cleaned (0 remaining).
+- **Deviations / Notes:**
+  - `react-router-dom@6` added (the only new runtime dependency); test
+    tooling (Vitest + jsdom + Testing Library) added as devDependencies.
+    Dockerfile `npm ci` consumes the updated lockfile unchanged.
+  - `PublicOnly` wrapper in App.tsx redirects authenticated users away from
+    login/register (STEP 8 "may be redirected … if simple" — it is simple).
+  - Token storage in `localStorage` per approved architecture (bearer-in-
+    header, same-origin SPA, no CSRF surface of consequence); documented
+    tradeoff in architecture.md §3/§8. No password/token ever logged; no
+    hard-coded backend host in src (relative `/api` only).
+  - Scope: NO habit list/create UI, NO completion/relapse buttons, NO streak/
+    weekly cards, NO goals UI — all deferred to Phases 8–9.
