@@ -31,6 +31,16 @@ export const habitSchema = z.object({
   type: z.enum(["BUILD", "BREAK"], { message: "Type must be BUILD or BREAK" }),
 });
 
+// Tracking date: calendar DATE string (D8). Real-date validity + write policy
+// are checked in services/tracking.ts (needs the habit's createdAt).
+export const dateSchema = z.object({
+  date: z.string().min(1, "Date is required"),
+});
+export const relapseSchema = z.object({
+  relapseDate: z.string().min(1, "relapseDate is required"),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type HabitInput = z.infer<typeof habitSchema>;
+export type DateInput = z.infer<typeof dateSchema>;

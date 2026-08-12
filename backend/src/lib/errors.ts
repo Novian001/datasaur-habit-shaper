@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-export const badRequest = (message: string) => new ApiError(400, "VALIDATION_ERROR", message);
+export const badRequest = (message: string, code = "VALIDATION_ERROR") => new ApiError(400, code, message);
 export const unauthorized = (message = "Unauthorized") => new ApiError(401, "UNAUTHORIZED", message);
 export const notFound = (message = "Not found") => new ApiError(404, "NOT_FOUND", message);
 export const conflict = (message: string) => new ApiError(409, "CONFLICT", message);

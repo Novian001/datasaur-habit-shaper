@@ -338,3 +338,64 @@ commit must exist before any application code.
   - The Phase 2 deferred restart/migrate-deploy idempotence check remains
     deferred to final clean-room verification (container restart mutation
     still not permitted).
+
+## Phase 5A — Tracking event mutations
+
+- **Human Decision:** The planned tracking/statistics phase was intentionally
+  split into 5A (tracking persistence) and 5B (derived statistics) to reduce
+  business-logic risk and make review/verification clearer. This is an
+  execution refinement after human review; it does not change the coding-test
+  requirements or approved business rules.
+- **Goal:** Implement source-of-truth completion and relapse events: BUILD
+  habits mark a calendar date completed (idempotent), completion removal,
+  BREAK habits record relapse calendar-date events. No streak/weekly
+  statistics, no goals, no tracking UI.
+- **Actions:**
+  - Date handling (`lib/dates.ts`): strict `YYYY-MM-DD` calendar-date
+    validation (rejects `2026-02-30`, `2026-13-01`, `abcd-ef-gh`); UTC
+    "today" string used only for the contract's not-future rule. No timezone
+    profiles/libraries; no timestamp conversion of habit dates (D8).
+  - Validation (`lib/validation.ts`): `dateSchema` (`{ date }`) and
+    `relapseSchema` (`{ relapseDate }`) — required strings; real-date
+    validity + write policy checked in the service where `createdAt` is known.
+  - Services (`services/tracking.ts`): shared ownership+type guard
+    (`getOwnedHabit` scoped by auth userId → foreign/nonexistent null → 404;
+    wrong type → 400 `INVALID_HABIT_TYPE`, checked before date policy).
+    `markCompletion`/`recordRelapse`: create → 201; on UNIQUE constraint
+    (P2002) fetch existing row → 200 (idempotent, no duplicate, no 409,
+    race-free — the constraint is the arbiter, not check-then-create).
+    `removeCompletion`: deleteMany → 204 (idempotent; ownership enforced
+    before, so absent row cannot disclose habit existence).
+    Write policy (contract §3/§4): valid calendar date, not in the future,
+    not before habit creation → else 400.
+  - Routes (`routes/tracking.ts`): `PUT /api/habits/:id/completions`,
+    `DELETE /api/habits/:id/completions/:date`, `POST /api/habits/:id/relapses`
+    — all behind `requireAuth`, mounted via `app.use("/api", trackingRouter)`
+    (no double-prefix). Malformed :id → 404.
+  - `lib/errors.ts`: `badRequest` gained an optional code param
+    (default `VALIDATION_ERROR`) to emit the contract's `INVALID_HABIT_TYPE`.
+- **Verification (all actually run):**
+  - Automated tests: `docker compose -f compose.yml -f compose.test.yml
+    run --rm backend-test` → **50/50 passed** (21 tracking + 14 habits +
+    15 auth regression). Tracking covers: 401s; BUILD complete 201 first /
+    200 repeat / single row; invalid/future/pre-creation dates 400; malformed
+    id 404; foreign 404; BREAK cannot complete 400 INVALID_HABIT_TYPE;
+    delete 204 idempotent; relapse 201/200 idempotent, one row; BUILD cannot
+    relapse 400; no CLEAN rows for BREAK.
+  - Docker smoke (nginx :3000, throwaway `phase5a-user-*@example.invalid`):
+    A completes A BUILD 201→200; A completes B BUILD → 404; A relapses A
+    BREAK 201→200; A relapses B BREAK → 404; A completes A BREAK → 400
+    INVALID_HABIT_TYPE; A relapses A BUILD → 400 INVALID_HABIT_TYPE;
+    A deletes completion 204→204. DB: relapse_date persisted exactly
+    `2026-08-12` (DATE semantics); no duplicate completion rows. Throwaway
+    users deleted after (cascade cleaned tracking rows).
+  - Regression: frontend :3000 → 200, health 200 `{status:"ok",db:"up"}`,
+    register/login/me → 201/200/200, habits create/list → 201/200,
+    `docker compose config --quiet` OK, 6 tables intact, single migration
+    applied, `prisma validate` OK, backend image build (tsc gate) passed.
+- **Deviations / Notes:**
+  - No schema/migration change; the Phase 2 `UNIQUE(habit_id, date)` and
+    `UNIQUE(habit_id, relapse_date)` constraints are used as-is.
+  - The Phase 2 deferred restart/migrate-deploy idempotence check remains
+    deferred to final clean-room verification (container restart mutation
+    still not permitted).
