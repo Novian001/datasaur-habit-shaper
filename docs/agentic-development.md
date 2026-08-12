@@ -519,3 +519,61 @@ commit must exist before any application code.
     `toISOString` only formats stored Prisma DATE values — never derives
     "today" (D8).
   - Phase 6 (goals) and all frontend business UI remain out of scope.
+
+---
+
+## Phase 6 — Goal management backend
+
+- **Goal:** Implement add/edit/remove Goals linked to owned BUILD/BREAK habits
+  (api-contract.md §5), backend only.
+- **Agent:** Hermes (Nous Research) — same agentic-development partner.
+- **Prompt/Instruction Summary (human → agent):** "Proceed with IMPLEMENTATION
+  PHASE 6 ONLY: GOAL MANAGEMENT BACKEND". Scope: Goals CRUD linked to a
+  habit owned by the authenticated user; BUILD and BREAK habits both valid;
+  no frontend goal UI, no target progression/deadlines/status/reminders.
+- **Human Decision:** Phase 5B (derived streak and weekly statistics) reviewed
+  and approved; Phase 6 approved to proceed.
+- **Actions:**
+  1. Verified repo state: main @ 3ae523e, local == origin/main, only untracked
+     Hermes temp dirs; Goal model already present in schema (Phase 2) — no
+     migration needed.
+  2. `backend/src/lib/validation.ts` — added `goalCreateSchema` (habitId
+     positive int; title 1–200 trimmed; description ≤ 1000 nullable optional)
+     and `goalUpdateSchema` (partial; habitId relink allowed per contract §5).
+  3. `backend/src/services/goals.ts` (NEW) — `createGoal` (ownership-checked
+     habitId → 404 D7 before create), `listGoals` (userId-scoped query,
+     deterministic newest-first, embedded safe habit id/name/type), `updateGoal`
+     (ownership-scoped; partial; relink re-checks ownership; description null
+     clears), `deleteGoal` (ownership-scoped; deletes ONLY the goal row),
+     `getOwnedGoal` (D7 lookup), `toSafeGoal` (no userId/password).
+  4. `backend/src/routes/goals.ts` (NEW) — GET / POST / PATCH / DELETE under
+     `/api/goals` with requireAuth, malformed-id → 404, foreign/nonexistent →
+     404 (never 403). Mounted in `app.ts` after tracking router.
+  5. `backend/test/goals.test.ts` (NEW) — 26 tests: auth 401s (4), create
+     (BUILD/BREAK link, empty/overlong title & description, nonexistent/foreign
+     habit → 404, client userId cannot override), list (isolation, empty,
+     contract shape), update (title/description/null-clear/relink to own
+     BUILD+BREAK, foreign goal 404, nonexistent 404, relink foreign → 404),
+     delete (owner 204, gone, habit survives, foreign 404, nonexistent 404).
+- **Verification (all actually run):**
+  - Canonical suite `docker compose -f compose.yml -f compose.test.yml run --rm
+    backend-test` → **114/114 passed** (26 goals + 35 stats + 22 tracking + 16
+    habits + 15 auth; Test Files 5). Backend image build (tsc gate) passed;
+    frontend image build passed; `docker compose config --quiet` OK.
+  - Two-user nginx smoke (:3000, throwaway users, cleaned): A sees only A
+    goals; B sees only B; A create-with-B-habit → 404; A PATCH B goal → 404;
+    A DELETE B goal → 404; A PATCH own goal (title + description null) → 200;
+    A relink own goal to own BREAK habit → 200; A DELETE own goal → 204;
+    linked habit GET after goal delete → 200 (habit intact). DB evidence:
+    goal rows carry correct user_id + habit_id (both BUILD and BREAK links);
+    deleting the throwaway user cascades owned goals (0 remaining).
+  - Regression smoke: register 201 / duplicate 409 / login 200 / me 200;
+    habit create 201 + list/detail with refDate 200; completion PUT 201;
+    stats GET 200 (streak/week fields intact); health 200 `{"status":"ok","db":"up"}`.
+- **Deviations / Notes:**
+  - Goal habit embedding: contract §5 embeds `habit { id, name, type }` —
+    both list and create/update responses include it (safe fields only).
+  - `description: null` in PATCH clears the description (contract §5 shows
+    null as a valid value); empty `{}` PATCH is a no-op update (strict mode).
+  - No schema/migration change (Goal model from Phase 2 already matches the
+    contract). No frontend goal UI — Phase 7+ pending human review.

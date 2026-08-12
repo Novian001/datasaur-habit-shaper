@@ -34,6 +34,22 @@ export const habitSchema = z.object({
   startDate: z.string().min(1, "startDate is required"),
 });
 
+// Goal (api-contract.md §5): title 1–200, description ≤ 1000 optional
+// (null/undefined = no description). habitId is validated for ownership in
+// services/goals.ts (foreign → 404, D7) — never trusted as a bare FK.
+export const goalCreateSchema = z.object({
+  habitId: z.number().int().positive(),
+  title: z.string().trim().min(1, "Title is required").max(200, "Title must be at most 200 characters"),
+  description: z.string().trim().max(1000, "Description must be at most 1000 characters").nullable().optional(),
+});
+// Partial update: any subset; no empty-body sentinel here (contract: 400 on
+// invalid, 404 foreign/nonexistent; empty {} → no-op update per strict mode).
+export const goalUpdateSchema = z.object({
+  habitId: z.number().int().positive().optional(),
+  title: z.string().trim().min(1, "Title is required").max(200, "Title must be at most 200 characters").optional(),
+  description: z.string().trim().max(1000, "Description must be at most 1000 characters").nullable().optional(),
+});
+
 // Tracking date: calendar DATE string (D8) + explicit client refDate for the
 // "not in the future" rule (backend never reads a server clock — human-review
 // correction 2026-08-12). Real-date validity is checked in services/tracking.ts
@@ -51,3 +67,5 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type HabitInput = z.infer<typeof habitSchema>;
 export type DateInput = z.infer<typeof dateSchema>;
+export type GoalCreateInput = z.infer<typeof goalCreateSchema>;
+export type GoalUpdateInput = z.infer<typeof goalUpdateSchema>;

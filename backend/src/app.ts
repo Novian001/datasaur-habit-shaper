@@ -3,6 +3,7 @@ import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./routes/auth.js";
 import { habitsRouter } from "./routes/habits.js";
 import { trackingRouter } from "./routes/tracking.js";
+import { goalsRouter } from "./routes/goals.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -14,6 +15,7 @@ app.use("/api", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/habits", habitsRouter);
 app.use("/api", trackingRouter);
+app.use("/api/goals", goalsRouter);
 
 // 404 fallback (uniform shape; unknown route is not found).
 app.use((_req, res) => {
