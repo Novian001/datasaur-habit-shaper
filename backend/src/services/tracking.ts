@@ -1,20 +1,23 @@
 import { prisma } from "../lib/prisma.js";
 import { notFound, badRequest } from "../lib/errors.js";
-import { isValidDateString, utcDateString } from "../lib/dates.js";
+import { isValidDateString } from "../lib/dates.js";
 import { getOwnedHabit } from "./habits.js";
 
 // Validate a calendar date against the approved write policy
-// (api-contract.md §3/§4): real YYYY-MM-DD, not in the future, not before the
-// habit was created. Comparisons are pure string/UTC-Date (no TZ shift).
-function assertWritableDate(date: string, habitCreatedAt: Date) {
+// (api-contract.md §3/§4): real YYYY-MM-DD, not after the client's refDate,
+// not before the habit's startDate. Pure string comparison (D8) — no server
+// clock, no UTC conversion (human-review correction 2026-08-12).
+function assertWritableDate(date: string, refDate: string, startDate: string) {
   if (!isValidDateString(date)) {
     throw badRequest("Date must be a valid calendar date in YYYY-MM-DD format");
   }
-  if (date > utcDateString()) {
+  if (!isValidDateString(refDate)) {
+    throw badRequest("refDate must be a valid calendar date in YYYY-MM-DD format");
+  }
+  if (date > refDate) {
     throw badRequest("Date cannot be in the future");
   }
-  const created = habitCreatedAt.toISOString().slice(0, 10);
-  if (date < created) {
+  if (date < startDate) {
     throw badRequest("Date cannot be before the habit was created");
   }
 }
@@ -33,12 +36,14 @@ export async function findOwnedHabitForTracking(userId: number, id: number, expe
   return habit;
 }
 
-export async function markCompletion(userId: number, habitId: number, date: string) {
+export async function markCompletion(userId: number, habitId: number, date: string, refDate: string) {
   const habit = await findOwnedHabitForTracking(userId, habitId, "BUILD");
   if (!habit) return { status: 404 as const };
 
-  // Date policy is validated against habit creation even on repeat (contract).
-  assertWritableDate(date, habit.createdAt);
+  // Date policy is validated against the client refDate + habit startDate even
+  // on repeat (contract). habit.startDate is the client-supplied local
+  // calendar boundary (D8) — never derived from the createdAt timestamp.
+  assertWritableDate(date, refDate, habit.startDate.toISOString().slice(0, 10));
 
   const dateObj = new Date(date + "T00:00:00.000Z");
   try {
@@ -75,11 +80,11 @@ export async function removeCompletion(userId: number, habitId: number, date: st
   return { status: 204 as const };
 }
 
-export async function recordRelapse(userId: number, habitId: number, date: string) {
+export async function recordRelapse(userId: number, habitId: number, date: string, refDate: string) {
   const habit = await findOwnedHabitForTracking(userId, habitId, "BREAK");
   if (!habit) return { status: 404 as const };
 
-  assertWritableDate(date, habit.createdAt);
+  assertWritableDate(date, refDate, habit.startDate.toISOString().slice(0, 10));
 
   const dateObj = new Date(date + "T00:00:00.000Z");
   try {

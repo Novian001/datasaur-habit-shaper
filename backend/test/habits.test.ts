@@ -4,6 +4,9 @@ import { app } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 
 const PASS = "testpass123";
+// A fixed calendar date used as the client-supplied habit startDate (D8).
+// Explicit string — the write-window tests never depend on the server clock.
+const START = "2026-08-10";
 
 // Controlled test DB (habit_shaper_test) — no production data. Reset per test.
 beforeEach(async () => {
@@ -15,8 +18,11 @@ async function registerUser(email: string) {
   return res.body.token as string;
 }
 
-async function createHabit(token: string, name: string, type: string) {
-  return request(app).post("/api/habits").set("Authorization", `Bearer ${token}`).send({ name, type });
+async function createHabit(token: string, name: string, type: string, startDate?: string) {
+  return request(app)
+    .post("/api/habits")
+    .set("Authorization", `Bearer ${token}`)
+    .send({ name, type, startDate: startDate ?? START });
 }
 
 describe("habits authorization", () => {
@@ -27,7 +33,7 @@ describe("habits authorization", () => {
   });
 
   it("2. POST /habits without token → 401", async () => {
-    const res = await request(app).post("/api/habits").send({ name: "X", type: "BUILD" });
+    const res = await request(app).post("/api/habits").send({ name: "X", type: "BUILD", startDate: START });
     expect(res.status).toBe(401);
   });
 
@@ -74,7 +80,7 @@ describe("habits create", () => {
     const res = await request(app)
       .post("/api/habits")
       .set("Authorization", `Bearer ${token}`)
-      .send({ name: "Hijack", type: "BUILD", userId: 999 });
+      .send({ name: "Hijack", type: "BUILD", userId: 999, startDate: START });
     expect(res.status).toBe(201);
     // zod strips unknown keys; the habit belongs to the token's user, not 999.
     const stored = await prisma.habit.findFirst({ where: { name: "Hijack" } });
@@ -151,11 +157,33 @@ describe("habits data safety", () => {
     const created = await createHabit(token, "Safe", "BUILD");
     const id = created.body.habit.id;
     for (const res of [created, await request(app).get(`/api/habits/${id}`).set("Authorization", `Bearer ${token}`)]) {
-      expect(Object.keys(res.body.habit).sort()).toEqual(["createdAt", "id", "name", "type"]);
+      expect(Object.keys(res.body.habit).sort()).toEqual(["createdAt", "id", "name", "startDate", "type"]);
       expect(JSON.stringify(res.body)).not.toContain("userId");
       expect(JSON.stringify(res.body)).not.toContain("password");
     }
     const list = await request(app).get("/api/habits").set("Authorization", `Bearer ${token}`);
-    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt", "id", "name", "type"]);
+    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt", "id", "name", "startDate", "type"]);
+  });
+});
+
+describe("habits startDate (D8 local-calendar boundary)", () => {
+  it("17. create with valid startDate → 201, startDate echoed as YYYY-MM-DD", async () => {
+    const token = await registerUser("a@example.invalid");
+    const res = await createHabit(token, "Edge", "BUILD", "2026-08-12");
+    expect(res.status).toBe(201);
+    expect(res.body.habit.startDate).toBe("2026-08-12");
+  });
+
+  it("18. malformed startDate (2026-02-30 / not-a-date) → 400, nothing stored", async () => {
+    const token = await registerUser("a@example.invalid");
+    for (const bad of ["2026-02-30", "not-a-date"]) {
+      const res = await request(app)
+        .post("/api/habits")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: "Bad", type: "BUILD", startDate: bad });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(await prisma.habit.count()).toBe(0);
   });
 });

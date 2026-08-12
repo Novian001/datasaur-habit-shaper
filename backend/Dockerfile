@@ -7,14 +7,17 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 
-# Generate the Prisma client (custom output: src/generated/prisma)
-RUN npx prisma generate
-
 COPY tsconfig.json ./
 COPY prisma.config.ts ./
 COPY vitest.config.ts ./
 COPY test ./test
 COPY src ./src
+
+# Generate the Prisma client (custom output: src/generated/prisma).
+# Runs AFTER COPY src so tsc compiles against the client generated from the
+# CURRENT schema (human-review correction 2026-08-12: startDate added).
+RUN npx prisma generate
+
 RUN npm run build
 
 FROM node:20-alpine

@@ -88,8 +88,8 @@ optional direct API access during development — see Ports).
 ## 4b. Dates / Timezones (D8)
 
 - All habit calendar values are naive `DATE` / `YYYY-MM-DD` — no timestamps, no timezones.
-- The **frontend** determines the user's local calendar date and sends it explicitly: as the `date` on completion/relapse actions and as the `refDate` query param on stats endpoints.
-- The **backend** validates `YYYY-MM-DD`, stores naive DATE, and never converts habit dates through UTC timestamps. The backend never reads the clock for habit semantics.
+- The **frontend** determines the user's local calendar date and sends it explicitly: as the habit's `startDate` (local calendar boundary at creation), as the `date`/`relapseDate` on completion/relapse actions, and as the `refDate` for the not-future rule and stats endpoints.
+- The **backend** validates `YYYY-MM-DD`, stores naive DATE, and never converts habit dates through UTC timestamps. The backend never reads the clock for habit semantics. `createdAt` is an audit timestamp, never a calendar date (human-review correction 2026-08-12).
 - No timezone libraries, no per-user timezone profiles. Revisit only if a real need emerges.
 
 ---

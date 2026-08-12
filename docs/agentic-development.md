@@ -399,3 +399,44 @@ commit must exist before any application code.
   - The Phase 2 deferred restart/migrate-deploy idempotence check remains
     deferred to final clean-room verification (container restart mutation
     still not permitted).
+
+## Phase 5A date-semantics audit — human-review correction
+
+- **Trigger:** human review identified that the Phase 5A implementation used
+  server/container UTC as the definition of the user's calendar "today"
+  (`new Date().toISOString().slice(0,10)`), contradicting approved D8 (the
+  frontend's local calendar date is authoritative; the backend never reads a
+  server clock). Additionally, habit `createdAt` (a UTC audit timestamp) was
+  converted through UTC and used as the habit's calendar start/eligibility
+  date — which shifts the calendar day for users east of UTC (e.g. 2026-08-12
+  02:00 Asia/Jakarta = 2026-08-11 19:00 UTC).
+- **Fix (CASE B + CASE C):**
+  - `Habit.startDate DATE` added (client-supplied local calendar boundary at
+    creation, `POST /api/habits` body `startDate`); `createdAt` remains an
+    audit timestamp and is never converted to a calendar date.
+  - Tracking mutations now require an explicit client `refDate`
+    (`PUT /completions` body `{ date, refDate }`; `POST /relapses` body
+    `{ relapseDate, refDate }`). Future-date rule = `date > refDate`
+    (string comparison); pre-start rule = `date < startDate`. No server clock
+    anywhere; no timezone libraries/profiles.
+  - New versioned migration `20260812060000_add_habit_start_date`
+    (`ALTER TABLE habits ADD start_date DATE NOT NULL`); the initial migration
+    was NOT modified, history NOT rewritten. DB was empty (0 rows), so no
+    backfill was needed.
+  - Dockerfile: `npx prisma generate` moved to AFTER `COPY src` in the build
+    stage so `tsc` compiles against the client generated from the current
+    schema (build gate now validates new fields).
+- **Verification (all actually run):**
+  - `docker compose -f compose.yml -f compose.test.yml run --rm backend-test`
+    → **53/53 passed** (22 tracking incl. explicit-string timezone-edge test,
+    16 habits incl. startDate validation, 15 auth regression).
+  - Backend image build (tsc gate) passed; `migrate deploy` applied
+    `20260812060000_add_habit_start_date`; MySQL column verified
+    `start_date DATE NOT NULL`; health 200 `{status:"ok",db:"up"}`;
+    `docker compose config --quiet` OK; migration count = 2, no schema drift.
+- **Deviations / Notes:**
+  - `utcDateString()` removed from `lib/dates.ts`; `shiftDate()` added (used
+    by future Phase 5B week-window math; pure calendar arithmetic).
+  - This correction is recorded honestly as a post-implementation
+    human-review fix; the original planning docs did NOT contain `startDate`/
+    `refDate` as habit fields — they are the resolution of the audit.

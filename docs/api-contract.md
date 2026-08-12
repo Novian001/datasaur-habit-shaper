@@ -15,9 +15,11 @@
 | 409 | `CONFLICT` | Duplicate email |
 
 All dates are naive `YYYY-MM-DD` strings (D8). The **frontend** determines the
-user's local calendar date and sends it explicitly for daily actions and as the
-stats reference date; the backend never uses a server clock for habit calendar
-semantics.
+user's local calendar date and sends it explicitly for daily actions (as `date`
+/ `relapseDate`), as the reference "today" (`refDate`), and as the habit start
+date (`startDate`); the backend never uses a server clock for habit calendar
+semantics. `startDate` (business calendar boundary) and `createdAt` (audit
+timestamp) are distinct — createdAt is never converted to a calendar date.
 
 ---
 
@@ -86,10 +88,12 @@ BREAK habits return `{ "cleanStreak": 9, "lastRelapseDate": "..." | null }` inst
 
 Auth: required. Body:
 ```json
-{ "name": "Meditate", "type": "BUILD" }
+{ "name": "Meditate", "type": "BUILD", "startDate": "2026-08-12" }
 ```
-Validation: name 1–120 chars; type `BUILD`|`BREAK`. Success 201: habit object
-(with stats, as above). Errors: 400 invalid; 401.
+Validation: name 1–120 chars; type `BUILD`|`BREAK`; `startDate` required —
+the user's local calendar date the habit begins (D8). The frontend supplies it
+from the browser's local calendar (no manual picker needed). Success 201:
+habit object (with stats, as above), including `startDate`. Errors: 400 invalid; 401.
 
 ### GET /api/habits/:id?refDate=YYYY-MM-DD
 
@@ -113,12 +117,14 @@ BREAK variant: `stats: { "cleanStreak": 9, "lastRelapseDate": "..." | null }`,
 
 Auth: required. Body:
 ```json
-{ "date": "2026-08-11" }
+{ "date": "2026-08-11", "refDate": "2026-08-12" }
 ```
 Behavior (D2, D8):
 - Habit must be type BUILD (else 400 `INVALID_HABIT_TYPE`).
-- `date` must be `YYYY-MM-DD`, not in the future, not before habit creation
-  (400 otherwise). The date is the frontend's local calendar date.
+- `date` must be `YYYY-MM-DD`, not after `refDate`, not before the habit's
+  `startDate` (400 otherwise). `date` is the frontend's local calendar date;
+  `refDate` is the frontend's local "today" — the backend never reads a server
+  clock for the not-future rule (D8).
 - **Idempotent:** marking an already-completed date succeeds without creating a
   duplicate row and without changing state. Consistent success status: **200 OK**
   (201 on first-time creation of the row). The UNIQUE(habit_id, date) constraint
@@ -142,12 +148,13 @@ Success 204. Errors: 401; 404 not owned/not found.
 
 Auth: required. Body:
 ```json
-{ "relapseDate": "2026-08-11" }
+{ "relapseDate": "2026-08-11", "refDate": "2026-08-12" }
 ```
 Behavior (D5, D8):
 - Habit must be type BREAK (else 400 `INVALID_HABIT_TYPE`).
-- Date must be `YYYY-MM-DD`, not in the future, not before habit creation (400).
-  The date is the frontend's local calendar date.
+- Date must be `YYYY-MM-DD`, not after `refDate`, not before the habit's
+  `startDate` (400). `date` is the frontend's local calendar date; `refDate`
+  is the frontend's local "today" — no server clock (D8).
 - **Idempotent:** a relapse already recorded for the same date succeeds without
   creating a duplicate row and without changing state (200; 201 on first
   recording). UNIQUE(habit_id, relapse_date) guarantees no duplicates (D5).

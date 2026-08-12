@@ -11,13 +11,24 @@ beforeEach(async () => {
   await prisma.user.deleteMany();
 });
 
+// The write window's start (habit startDate); UTC-today minus 1 is always
+// within [startDate, refDate] for habits created in beforeEach ("now").
+function startOfWindow(): string {
+  const t = new Date();
+  t.setUTCDate(t.getUTCDate() - 1);
+  return t.toISOString().slice(0, 10);
+}
+
 async function registerUser(email: string) {
   const res = await request(app).post("/api/auth/register").send({ email, password: PASS });
   return res.body.token as string;
 }
 
-async function createHabit(token: string, name: string, type: string) {
-  return request(app).post("/api/habits").set("Authorization", `Bearer ${token}`).send({ name, type });
+async function createHabit(token: string, name: string, type: string, startDate?: string) {
+  return request(app)
+    .post("/api/habits")
+    .set("Authorization", `Bearer ${token}`)
+    .send({ name, type, startDate: startDate ?? startOfWindow() });
 }
 
 describe("build completions", () => {
@@ -29,7 +40,7 @@ describe("build completions", () => {
   });
 
   it("1. no token → 401", async () => {
-    const res = await request(app).put(`/api/habits/${habitId}/completions`).send({ date: TODAY });
+    const res = await request(app).put(`/api/habits/${habitId}/completions`).send({ date: TODAY, refDate: TODAY });
     expect(res.status).toBe(401);
   });
 
@@ -37,7 +48,7 @@ describe("build completions", () => {
     const res = await request(app)
       .put(`/api/habits/${habitId}/completions`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ date: TODAY });
+      .send({ date: TODAY, refDate: TODAY });
     expect(res.status).toBe(201);
     expect(res.body.completion.habitId).toBe(habitId);
     expect(res.body.completion.date).toBe(TODAY);
@@ -45,7 +56,7 @@ describe("build completions", () => {
 
   it("4/5. repeated same PUT → 200, exactly one completion row", async () => {
     const put = () =>
-      request(app).put(`/api/habits/${habitId}/completions`).set("Authorization", `Bearer ${token}`).send({ date: TODAY });
+      request(app).put(`/api/habits/${habitId}/completions`).set("Authorization", `Bearer ${token}`).send({ date: TODAY, refDate: TODAY });
     expect((await put()).status).toBe(201);
     expect((await put()).status).toBe(200);
     const rows = await prisma.habitCompletion.findMany({ where: { habitId } });
@@ -57,7 +68,7 @@ describe("build completions", () => {
       const res = await request(app)
         .put(`/api/habits/${habitId}/completions`)
         .set("Authorization", `Bearer ${token}`)
-        .send({ date: bad });
+        .send({ date: bad, refDate: TODAY });
       expect(res.status).toBe(400);
     }
   });
@@ -70,7 +81,7 @@ describe("build completions", () => {
   });
 
   it("7. malformed habit id handled safely → 404", async () => {
-    const res = await request(app).put("/api/habits/abc/completions").set("Authorization", `Bearer ${token}`).send({ date: TODAY });
+    const res = await request(app).put("/api/habits/abc/completions").set("Authorization", `Bearer ${token}`).send({ date: TODAY, refDate: TODAY });
     expect(res.status).toBe(404);
   });
 
@@ -80,12 +91,12 @@ describe("build completions", () => {
     const res = await request(app)
       .put(`/api/habits/${bHabit}/completions`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ date: TODAY });
+      .send({ date: TODAY, refDate: TODAY });
     expect(res.status).toBe(404);
   });
 
   it("9. nonexistent habit → 404", async () => {
-    const res = await request(app).put("/api/habits/999999/completions").set("Authorization", `Bearer ${token}`).send({ date: TODAY });
+    const res = await request(app).put("/api/habits/999999/completions").set("Authorization", `Bearer ${token}`).send({ date: TODAY, refDate: TODAY });
     expect(res.status).toBe(404);
   });
 
@@ -150,7 +161,7 @@ describe("break relapses", () => {
   });
 
   it("15. no token → 401", async () => {
-    const res = await request(app).post(`/api/habits/${habitId}/relapses`).send({ relapseDate: TODAY });
+    const res = await request(app).post(`/api/habits/${habitId}/relapses`).send({ relapseDate: TODAY, refDate: TODAY });
     expect(res.status).toBe(401);
   });
 
@@ -158,7 +169,7 @@ describe("break relapses", () => {
     const res = await request(app)
       .post(`/api/habits/${habitId}/relapses`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: TODAY });
+      .send({ relapseDate: TODAY, refDate: TODAY });
     expect(res.status).toBe(201);
     expect(res.body.relapse.habitId).toBe(habitId);
     expect(res.body.relapse.relapseDate).toBe(TODAY);
@@ -171,7 +182,7 @@ describe("break relapses", () => {
     const res = await request(app)
       .post(`/api/habits/${habitId}/relapses`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: "2026-02-30" });
+      .send({ relapseDate: "2026-02-30", refDate: TODAY });
     expect(res.status).toBe(400);
   });
 
@@ -181,7 +192,7 @@ describe("break relapses", () => {
     const res = await request(app)
       .post(`/api/habits/${bHabit}/relapses`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: TODAY });
+      .send({ relapseDate: TODAY, refDate: TODAY });
     expect(res.status).toBe(404);
   });
 
@@ -189,7 +200,7 @@ describe("break relapses", () => {
     const res = await request(app)
       .post("/api/habits/999999/relapses")
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: TODAY });
+      .send({ relapseDate: TODAY, refDate: TODAY });
     expect(res.status).toBe(404);
   });
 
@@ -198,14 +209,14 @@ describe("break relapses", () => {
     const res = await request(app)
       .post(`/api/habits/${buildHabit}/relapses`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: TODAY });
+      .send({ relapseDate: TODAY, refDate: TODAY });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("INVALID_HABIT_TYPE");
   });
 
   it("22. duplicate same-date relapse → 201 then 200, one row (contract idempotent)", async () => {
     const post = () =>
-      request(app).post(`/api/habits/${habitId}/relapses`).set("Authorization", `Bearer ${token}`).send({ relapseDate: TODAY });
+      request(app).post(`/api/habits/${habitId}/relapses`).set("Authorization", `Bearer ${token}`).send({ relapseDate: TODAY, refDate: TODAY });
     expect((await post()).status).toBe(201);
     expect((await post()).status).toBe(200);
     expect(await prisma.relapseEvent.count({ where: { habitId } })).toBe(1);
@@ -215,11 +226,33 @@ describe("break relapses", () => {
     await request(app)
       .post(`/api/habits/${habitId}/relapses`)
       .set("Authorization", `Bearer ${token}`)
-      .send({ relapseDate: TODAY });
+      .send({ relapseDate: TODAY, refDate: TODAY });
     expect(await prisma.habitCompletion.count({ where: { habitId } })).toBe(0);
+  });
+
+  it("24. timezone-edge: explicit strings define the window, no server TZ involved (D8)", async () => {
+    // Habit starts on a fixed local calendar date.
+    const h = await createHabit(token, "Edge", "BUILD", "2026-08-12");
+    const id = h.body.habit.id;
+    expect(h.body.habit.startDate).toBe("2026-08-12");
+
+    // date == refDate → allowed (the user's "today" is their own local date)
+    expect((await putDate(token, id, "2026-08-12", "2026-08-12")).status).toBe(201);
+
+    // date > refDate → future, rejected (no server clock involved)
+    expect((await putDate(token, id, "2026-08-13", "2026-08-12")).status).toBe(400);
+
+    // date < startDate → before habit start, rejected
+    expect((await putDate(token, id, "2026-08-11", "2026-08-12")).status).toBe(400);
+
+    // refDate validity itself is enforced (malformed refDate → 400, not 500)
+    expect((await putDate(token, id, "2026-08-12", "not-a-date")).status).toBe(400);
   });
 });
 
-async function putDate(token: string, habitId: number, date: string) {
-  return request(app).put(`/api/habits/${habitId}/completions`).set("Authorization", `Bearer ${token}`).send({ date });
+async function putDate(token: string, habitId: number, date: string, refDate: string = TODAY) {
+  return request(app)
+    .put(`/api/habits/${habitId}/completions`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({ date, refDate });
 }

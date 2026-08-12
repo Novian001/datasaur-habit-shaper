@@ -27,6 +27,11 @@ model Habit {
   userId    Int       @map("user_id") @db.UnsignedInt
   name      String    @db.VarChar(120)
   type      HabitType
+  // Business calendar boundary: the client's local calendar date when the
+  // habit was created (D8). An audit timestamp is NOT a calendar date.
+  // Human-review correction 2026-08-12: createdAt was previously converted
+  // through UTC for pre-creation validation, which shifted the calendar day.
+  startDate DateTime  @map("start_date") @db.Date
   createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
 
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)

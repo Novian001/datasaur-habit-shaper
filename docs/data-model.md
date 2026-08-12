@@ -45,8 +45,13 @@ habit counts grow to thousands of rows per habit (out of scope).
 | user_id | INT UNSIGNED | NOT NULL, **FK → users.id, ON DELETE CASCADE** |
 | name | VARCHAR(120) | NOT NULL |
 | type | ENUM('BUILD','BREAK') | NOT NULL |
+| start_date | DATE | NOT NULL |
 | created_at | DATETIME(3) | NOT NULL, DEFAULT now |
 
+- **`start_date`** is the business calendar boundary: the client's local
+  calendar date when the habit began (D8). Distinct from `created_at` (audit
+  timestamp) — `created_at` is never converted to a calendar date
+  (human-review correction 2026-08-12).
 - **Index:** `(user_id)` — every access path filters by owner first.
 - Ownership enforced structurally (FK) and by query scoping (all reads/writes
   filter `user_id = req.userId`).
@@ -152,9 +157,9 @@ walk from refDate backward:
 refDate       = client-supplied reference date (frontend local calendar date)
 weekStartDate = Monday on or before refDate        (calendar DATE, no timestamps)
 weekEndDate   = Sunday on or after refDate         (calendar DATE, no timestamps)
-eligibleDays  = calendar days in [max(weekStartDate, habit.createdAtDate), refDate]
-                — future dates (after refDate) excluded; pre-creation dates excluded
-completedCount = completions in [max(weekStartDate, habit.createdAtDate), refDate]
+eligibleDays  = calendar days in [max(weekStartDate, habit.startDate), refDate]
+                — future dates (after refDate) excluded; pre-start dates excluded
+completedCount = completions in [max(weekStartDate, habit.startDate), refDate]
 completionRate = completedCount / len(eligibleDays)   (0 if eligibleDays empty)
 missedDays     = len(eligibleDays) - completedCount
 ```
@@ -170,7 +175,7 @@ missedDays     = len(eligibleDays) - completedCount
 
 ```
 relapses = SELECT relapse_date FROM relapse_events WHERE habit_id = ? ORDER BY relapse_date ASC
-creation = habit.createdAt date
+creation = habit.startDate date  (client-supplied calendar boundary, D8)
 refDate  = client-supplied reference date (frontend local calendar date)
 
 if no relapses:

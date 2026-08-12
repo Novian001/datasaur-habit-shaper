@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { habitSchema } from "../lib/validation.js";
+import { isValidDateString } from "../lib/dates.js";
+import { badRequest, notFound } from "../lib/errors.js";
 import { requireAuth } from "../middleware/auth.js";
-import { notFound } from "../lib/errors.js";
 import { createHabit, listHabits, getOwnedHabit, toSafeHabit } from "../services/habits.js";
 
 export const habitsRouter = Router();
@@ -12,6 +13,9 @@ habitsRouter.use(requireAuth);
 // POST /api/habits — 201 { habit }; 400 invalid; 401.
 habitsRouter.post("/", async (req, res) => {
   const input = habitSchema.parse(req.body);
+  if (!isValidDateString(input.startDate)) {
+    throw badRequest("startDate must be a valid calendar date in YYYY-MM-DD format");
+  }
   const habit = await createHabit(req.userId!, input);
   res.status(201).json({ habit: toSafeHabit(habit) });
 });
