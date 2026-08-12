@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
-import AppShell from "./components/AppShell";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Dashboard from "./pages/Dashboard";
+import HabitDetailPage from "./pages/HabitDetail";
 
 // Authenticated users visiting /login or /register are redirected to the
 // protected shell (STEP 8). Implemented with a tiny wrapper instead of
@@ -47,7 +48,15 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <AppShell />
+            <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/habits/:id"
+        element={
+          <ProtectedRoute>
+            <HabitDetailPage />
           </ProtectedRoute>
         }
       />

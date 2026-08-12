@@ -16,14 +16,25 @@ function installFetchStub(handlers: Record<string, (body: any) => { status: numb
     const path = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ path, body });
-    const handler = handlers[path];
-    if (!handler) return new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "no stub" } }), { status: 404, headers: { "Content-Type": "application/json" } });
-    const { status, json } = handler(body);
+    // Prefix match so ?refDate=... query strings resolve to the stub key.
+    const key = Object.keys(handlers).find((k) => path.startsWith(k));
+    if (!key) return new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "no stub" } }), { status: 404, headers: { "Content-Type": "application/json" } });
+    const { status, json } = handlers[key](body);
     return new Response(JSON.stringify(json), { status, headers: { "Content-Type": "application/json" } });
   });
   vi.stubGlobal("fetch", stub);
   return { stub, calls };
 }
+
+// Dashboard also fetches /api/habits?refDate=... on mount — stub it with an
+// empty list so tests 3/4/6/7/9 don't error on the extra call.
+const dashboardHandlers = {
+  "/api/auth/me": (_body: unknown) => ({
+    status: 200,
+    json: { user: { id: 7, email: "carol@example.com", createdAt: "2026-01-01T00:00:00.000Z" } },
+  }),
+  "/api/habits?refDate=": (_body: unknown) => ({ status: 200, json: { habits: [] } }),
+};
 
 function renderApp(initialPath = "/") {
   return render(
@@ -68,14 +79,14 @@ describe("Phase 7 auth flow", () => {
         status: 201,
         json: { user: { id: 8, email: body.email, createdAt: "2026-01-01T00:00:00.000Z" }, token: "synthetic-jwt-register" },
       }),
-      ...meHandlers,
+      ...dashboardHandlers,
     });
     renderApp("/register");
     await userEvent.type(screen.getByLabelText(/email/i), "dave@example.com");
     await userEvent.type(screen.getByLabelText(/password/i), "password-123");
     await userEvent.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(await screen.findByText(/welcome, dave@example.com/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /today's habits/i })).toBeInTheDocument();
     expect(getStoredToken()).toBe("synthetic-jwt-register");
     expect(calls.some((c) => c.path === "/api/auth/register")).toBe(true);
     // never logged: stub only records calls, no console output assertions needed here
@@ -88,14 +99,14 @@ describe("Phase 7 auth flow", () => {
         status: 200,
         json: { user: { id: 9, email: body.email, createdAt: "2026-01-01T00:00:00.000Z" }, token: "synthetic-jwt-login" },
       }),
-      ...meHandlers,
+      ...dashboardHandlers,
     });
     renderApp("/login");
     await userEvent.type(screen.getByLabelText(/email/i), "erin@example.com");
     await userEvent.type(screen.getByLabelText(/password/i), "password-456");
     await userEvent.click(screen.getByRole("button", { name: /log in/i }));
 
-    expect(await screen.findByText(/welcome, erin@example.com/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /today's habits/i })).toBeInTheDocument();
     expect(getStoredToken()).toBe("synthetic-jwt-login");
     expect(calls.some((c) => c.path === "/api/auth/login")).toBe(true);
   });
@@ -121,16 +132,16 @@ describe("Phase 7 auth flow", () => {
 
   it("6. authenticated user reaches the protected shell", async () => {
     localStorage.setItem("habit-shaper-token", "synthetic-jwt-pre");
-    installFetchStub(meHandlers);
+    installFetchStub(dashboardHandlers);
     renderApp("/");
-    expect(await screen.findByText(/welcome, carol@example.com/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /today's habits/i })).toBeInTheDocument();
   });
 
   it("7. /auth/me bootstrap restores session after reload", async () => {
     localStorage.setItem("habit-shaper-token", "synthetic-jwt-reload");
-    const { calls } = installFetchStub(meHandlers);
+    const { calls } = installFetchStub(dashboardHandlers);
     renderApp("/");
-    expect(await screen.findByText(/welcome, carol@example.com/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /today's habits/i })).toBeInTheDocument();
     expect(calls.some((c) => c.path === "/api/auth/me")).toBe(true);
     expect(getStoredToken()).toBe("synthetic-jwt-reload");
   });
@@ -147,9 +158,9 @@ describe("Phase 7 auth flow", () => {
 
   it("9. logout clears the session and returns to login", async () => {
     localStorage.setItem("habit-shaper-token", "synthetic-jwt-logout");
-    installFetchStub(meHandlers);
+    installFetchStub(dashboardHandlers);
     renderApp("/");
-    await screen.findByText(/welcome, carol@example.com/i);
+    await screen.findByRole("heading", { name: /today's habits/i });
     await userEvent.click(screen.getByRole("button", { name: /logout/i }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /welcome back/i })).toBeInTheDocument());
@@ -160,6 +171,6 @@ describe("Phase 7 auth flow", () => {
     installFetchStub(meHandlers);
     renderApp("/");
     expect(await screen.findByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
-    expect(screen.queryByText(/dashboard features are coming/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/today's habits/i)).not.toBeInTheDocument();
   });
 });

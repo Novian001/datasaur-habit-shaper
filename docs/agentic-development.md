@@ -659,3 +659,33 @@ commit must exist before any application code.
     hard-coded backend host in src (relative `/api` only).
   - Scope: NO habit list/create UI, NO completion/relapse buttons, NO streak/
     weekly cards, NO goals UI — all deferred to Phases 8–9.
+
+---
+
+## Phase 8 — Habit dashboard and tracking frontend
+
+**Status:** complete, verified, committed, pushed. Commit `feat(frontend): implement habit dashboard and tracking`.
+
+**Scope:** habit list + creation, BUILD completion/undo, BREAK relapse, streak/weekly/missed display, habit detail page, browser-local YYYY-MM-DD dates. No goals UI (Phase 9), no backend/schema changes, no new auth behavior.
+
+**Process note (phase-state drift):** Phase 8 implementation was started after session-state drift before the intended human checkpoint after Phase 7. A read-only audit confirmed Phase 7 had already been independently committed/pushed (`5e76759 feat(frontend): implement authentication flow`) and Phase 8 was entirely uncommitted working-tree changes. Human review then approved verification/closure of the existing Phase 8 work without discarding or redesigning it.
+
+**Files:**
+- NEW `frontend/src/api/habits.ts` — typed habit API (list/create/complete/uncomplete/relapse), relative `/api` paths, token via apiRequest, refDate always `todayLocal()`.
+- NEW `frontend/src/pages/Dashboard.tsx` — habit list, create form, per-habit today actions (BUILD complete / BREAK relapse), loading/empty/error states, header with logout.
+- NEW `frontend/src/pages/HabitDetail.tsx` — stats panel (BUILD streak/week/rate/missed; BREAK clean streak/last relapse), completedDates/relapseDates lists, BUILD toggle (complete/undo per date).
+- MOD `frontend/src/App.tsx` — routes: `/` → Dashboard, `/habits/:id` → HabitDetailPage (both ProtectedRoute); removed AppShell import.
+- MOD `frontend/src/api/client.ts` — added `method` option (GET/POST/PUT/DELETE) to apiRequest; default POST if body else GET.
+- MOD `frontend/src/index.css` — +197 lines Phase 8 styles (habit cards, badges, stats panel, date lists, buttons), responsive to 480px.
+- MOD `frontend/src/test/auth-flow.test.tsx` — stub prefix-match for `?refDate=...`; dashboard handler for habits fetch; assertions moved from AppShell text to dashboard heading.
+- DEL `frontend/src/components/AppShell.tsx` — placeholder shell (welcome + "coming next phase") removed; its only real responsibility (logout) moved into Dashboard header; protected routing/auth state unchanged (ProtectedRoute untouched).
+
+**Date semantics (D8):** `frontend/src/lib/date.ts` `todayLocal()` uses `getFullYear()/getMonth()/getDate()` — browser-local calendar date, never `new Date().toISOString().slice(0,10)`. refDate on every habit GET/PUT/POST; startDate from `<input type="date">`; completion/relapse dates are explicit local dates.
+
+**Verification (all actually run):**
+- Backend canonical suite: 114/114 (5 files: 15 auth + 16 habits + 22 tracking + 35 stats + 26 goals).
+- Frontend gates: `npx tsc --noEmit` exit 0; `npm test` 10/10; `npm run build` OK (177.69 kB / 56.83 kB gzip).
+- nginx :3000 E2E smoke (throwaway `phase8-e2e-*@example.invalid` users, deleted after; 19/19 checks): register 201, login, me 200, no-token 401; create BUILD + BREAK; list shows both; complete today 201 / idempotent 200; stats streak=1 week=1/4 missed=3 + completedDates; undo 204 → streak 0; relapse 201 → cleanStreak 0 + lastRelapseDate; user B sees A's habit as 404 (uniform hiding) and empty list; refDate/startDate local dates confirmed. Cleanup verified 0 remaining users.
+- Served bundle confirmed = new build (index-CIlMbuzK.js contains dashboard code).
+
+**Known environment notes:** Docker Desktop daemon dropped twice mid-Phase-8 (pipe dockerDesktopLinuxEngine); recovery = taskkill + relaunch + poll, no data loss. Script bug in first smoke run (ownership check missing `?refDate=`) — backend correctly returned 400; fixed script, not product code.

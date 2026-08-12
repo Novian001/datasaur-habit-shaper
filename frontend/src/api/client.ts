@@ -19,6 +19,7 @@ export class ApiClientError extends Error {
 export type RequestOptions = {
   token?: string | null;
   body?: unknown;
+  method?: "GET" | "POST" | "PUT" | "DELETE";
 };
 
 // Parses the backend's uniform error shape; falls back to a safe generic
@@ -38,11 +39,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers["Content-Type"] = "application/json";
   if (options.token) headers["Authorization"] = `Bearer ${options.token}`;
+  const method = options.method ?? (options.body !== undefined ? "POST" : "GET");
 
   let res: Response;
   try {
     res = await fetch(path, {
-      method: options.body !== undefined ? "POST" : "GET",
+      method,
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
