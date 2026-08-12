@@ -25,5 +25,12 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+// Habit: name 1–120 chars (api-contract.md), trimmed; type BUILD|BREAK only.
+export const habitSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters"),
+  type: z.enum(["BUILD", "BREAK"], { message: "Type must be BUILD or BREAK" }),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type HabitInput = z.infer<typeof habitSchema>;

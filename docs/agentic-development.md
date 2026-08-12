@@ -273,3 +273,68 @@ commit must exist before any application code.
     it remains deferred to final clean-room verification (testing-strategy §6).
   - The previously-deferred `db: "up"` health field is now implemented
     (resolves the Phase 2 deviation).
+
+## Phase 4 — Habit domain API
+
+- **Goal:** Implement the authenticated habit-management boundary: create a
+  habit, list own habits, retrieve one own habit, BUILD/BREAK type
+  validation, ownership isolation (404 hiding, no 403), safe errors,
+  focused automated tests, Docker smoke verification. No completions,
+  relapses, streaks, weekly stats, missed-day calc, goals, or habit UI.
+- **Actions:**
+  - Schema: unchanged — `Habit` model + `HabitType` enum already exist from
+    Phase 2. No migration, no `schema.prisma` change.
+  - Validation (`lib/validation.ts`): added `habitSchema` — `name` string,
+    trimmed, min 1 / max 120 (matches `VarChar(120)`); `type` enum
+    `BUILD | BREAK` only; unknown keys (e.g. client `userId`) stripped.
+  - Service (`services/habits.ts`): `createHabit` (userId always from auth
+    context), `listHabits` (scoped `where: { userId }`, deterministic
+    `orderBy createdAt desc` — engineering detail), `getOwnedHabit`
+    (scoped `where: { id, userId }` — foreign/nonexistent → null → 404,
+    D7 uniform hiding, never 403), `toSafeHabit` (`{ id, name, type,
+    createdAt }` — no stats yet).
+  - Routes (`routes/habits.ts`): all behind `requireAuth` —
+    `POST /api/habits` 201, `GET /api/habits` 200 `{ habits: [...] }`,
+    `GET /api/habits/:id` 200 `{ habit }` / 404 (missing OR not owned);
+    malformed id → 404 (no 500). `app.ts` mounts under `/api/habits`
+    (nginx `/api` prefix — no double-prefix).
+  - Tests (`test/habits.test.ts`): Vitest + Supertest, 14 tests — 401s
+    without token, BUILD/BREAK create 201, invalid type 400, empty/121-char
+    name 400, client `userId` stripped (ownership cannot be overridden),
+    two-user list isolation, empty list, owner 200, foreign 404 (both
+    directions), nonexistent 404, malformed id 404, safe response shape.
+  - `vitest.config.ts`: added `fileParallelism: false` — both test files
+    share one test DB; parallel files clobbered each other's users
+    (FK violation on habit create). Sequential files fix it.
+- **Verification (all actually run):**
+  - Automated tests: `docker compose -f compose.yml -f compose.test.yml
+    run --rm backend-test` → **29/29 passed** (14 habits + 15 auth
+    regression).
+  - Docker smoke (nginx :3000, throwaway `phase4-user-*@example.invalid`):
+    register A/B 201; A creates BUILD + BREAK 201; B creates BUILD 201;
+    invalid type 400 `VALIDATION_ERROR`; A list = only A's 2 habits;
+    B list = only B's 1; A GET own → 200; A GET B's → 404; B GET A's →
+    404; no token → 401. DB join confirmed habits.user_id matches owners.
+    Throwaway users deleted after (cascade removed habits; 0 rows remain).
+  - Regression: frontend :3000 → 200 (SPA), health → 200
+    `{ status: "ok", db: "up" }`, register/login/me through nginx → 201 /
+    200 / 200, 6 tables intact, single migration applied, `prisma validate`
+    OK, backend image build (tsc typecheck gate) passed.
+- **Human Decision:** Phase 3 reviewed and habit domain phase approved
+  ("Phase 3 authentication has passed human review. Proceed with
+  IMPLEMENTATION PHASE 4 ONLY: HABIT DOMAIN API").
+- **Deviations / Notes:**
+  - The committed `api-contract.md` couples the habit routes with a
+    `refDate` query param and computed statistics (`currentStreak`,
+    `weekCompleted`, `weekElapsedDays`, `weekCompletionRate`, `missedDays`
+    for BUILD; `cleanStreak`, `lastRelapseDate` for BREAK; plus
+    `completedDates`/`relapseDates` on detail). Those statistics are Phase
+    5 scope; Phase 4 returns plain habit objects (`{ habits }` / `{ habit }`)
+    without stats and without `refDate`. The contract's route shape
+    (`GET /api/habits`, `POST /api/habits`, `GET /api/habits/:id`) is
+    implemented exactly; the stats coupling is deferred to Phase 5.
+  - No habit edit/delete implemented (not required by the coding test or
+    committed contract).
+  - The Phase 2 deferred restart/migrate-deploy idempotence check remains
+    deferred to final clean-room verification (container restart mutation
+    still not permitted).
