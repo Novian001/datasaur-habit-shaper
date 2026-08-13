@@ -20,11 +20,10 @@ export async function getHabitStats(userId: number, habitId: number, refDate: st
 
   const startDate = habit.startDate.toISOString().slice(0, 10);
   // refDate is a calendar date; startDate is the business boundary (D8).
-  // A refDate before the habit started is meaningless — reject before any
-  // derivation (data-model.md §4: startDate is the lower calendar boundary).
-  if (refDate < startDate) {
-    throw badRequest("refDate cannot be before the habit startDate");
-  }
+  // A refDate before startDate means the habit hasn't started yet (future
+  // startDate): the pure stats functions below already clamp everything to 0
+  // and never count pre-start days, so no validation error is raised here.
+  // Pre-start tracking is still rejected by the tracking service.
 
   if (habit.type === "BUILD") {
     const rows = await prisma.habitCompletion.findMany({

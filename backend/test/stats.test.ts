@@ -217,13 +217,56 @@ describe("stats API validation and ownership", () => {
     }
   });
 
-  it("27. impossible date (refDate before startDate) → 400", async () => {
+  it("27. future startDate: refDate before startDate → 200 with zero stats (no 400)", async () => {
+    // Future-start habit: startDate 2026-08-19, refDate 2026-08-18 (before start).
     const h = await createHabit(token, "M", "BUILD", "2026-08-19");
     const res = await request(app).get(`/api/habits/${h.id}?refDate=2026-08-18`).set("Authorization", `Bearer ${token}`);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect(res.body.stats.currentStreak).toBe(0);
+    expect(res.body.stats.weekCompleted).toBe(0);
+    expect(res.body.stats.weekElapsedDays).toBe(0);
+    expect(res.body.stats.weekCompletionRate).toBe(0);
+    expect(res.body.stats.missedDays).toBe(0);
   });
 
-  it("28. foreign habit → 404 (D7 uniform hiding)", async () => {
+  it("28. past startDate still valid: BREAK startDate 2026-08-10, refDate 2026-08-13, no relapse → cleanStreak 4", async () => {
+    const h = await createHabit(token, "B", "BREAK", "2026-08-10");
+    const res = await request(app).get(`/api/habits/${h.id}?refDate=2026-08-13`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.stats.cleanStreak).toBe(4);
+    expect(res.body.stats.lastRelapseDate).toBeNull();
+  });
+
+  it("29. future BREAK: startDate 2026-08-15, refDate 2026-08-13 → cleanStreak 0, no error", async () => {
+    const h = await createHabit(token, "B", "BREAK", "2026-08-15");
+    const res = await request(app).get(`/api/habits/${h.id}?refDate=2026-08-13`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.stats.cleanStreak).toBe(0);
+    expect(res.body.stats.lastRelapseDate).toBeNull();
+  });
+
+  it("30. future BUILD: startDate 2026-08-15, refDate 2026-08-13 → streak 0, missed 0, no pre-start eligible days", async () => {
+    const h = await createHabit(token, "M", "BUILD", "2026-08-15");
+    const res = await request(app).get(`/api/habits/${h.id}?refDate=2026-08-13`).set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.stats.currentStreak).toBe(0);
+    expect(res.body.stats.weekCompleted).toBe(0);
+    expect(res.body.stats.weekElapsedDays).toBe(0);
+    expect(res.body.stats.weekCompletionRate).toBe(0);
+    expect(res.body.stats.missedDays).toBe(0);
+  });
+
+  it("31. list with active + future-start habit → 200, both returned", async () => {
+    await createHabit(token, "Active", "BUILD", "2026-08-10");
+    await createHabit(token, "Future", "BUILD", "2026-08-15");
+    const res = await request(app).get("/api/habits?refDate=2026-08-13").set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const names = res.body.habits.map((x: { name: string }) => x.name);
+    expect(names).toContain("Active");
+    expect(names).toContain("Future");
+  });
+
+  it("32. foreign habit → 404 (D7 uniform hiding)", async () => {
     const b = await registerUser("b@example.invalid");
     const bHabit = await createHabit(b, "B", "BUILD");
     const res = await request(app).get(`/api/habits/${bHabit.id}?refDate=2026-08-21`).set("Authorization", `Bearer ${token}`);

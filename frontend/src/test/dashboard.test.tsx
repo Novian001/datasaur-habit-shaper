@@ -293,4 +293,55 @@ describe("Dashboard — add habit modal", () => {
     expect(detailsLinks.length).toBeGreaterThanOrEqual(1);
     expect(detailsLinks[0]).toHaveAttribute("href", "/habits/1");
   });
+
+  it("shows a future-start habit as not started, with tracking action disabled", async () => {
+    // Store with a future-start habit (startDate after today's refDate).
+    // "today" in the app is todayLocal(); the test renders with the real
+    // clock, so the future date must be well ahead of it.
+    const future = "2099-01-01";
+    const h = (id: number, name: string, type: string, startDate: string) => ({
+      id,
+      name,
+      type,
+      startDate,
+      stats: { currentStreak: 0, cleanStreak: 0, weekCompleted: 0, weekElapsedDays: 0, missedDays: 0 },
+    });
+    const handlers: Record<string, Handler> = {
+      "/api/auth/me": meHandler["/api/auth/me"],
+      "/api/habits": () => ({
+        status: 200,
+        json: {
+          habits: [
+            h(1, "Future Build", "BUILD", future),
+            h(2, "Future Break", "BREAK", future),
+            h(3, "Active", "BUILD", "2026-08-01"),
+          ],
+        },
+      }),
+    };
+    installFetchStub(handlers);
+    await renderDashboard();
+
+    // Both future habits show the not-started state.
+    expect(screen.getAllByText(`Starts ${future}`).length).toBe(2);
+    // The disabled "Not started" action appears for each future habit.
+    const notStartedButtons = screen.getAllByRole("button", { name: /not started/i });
+    expect(notStartedButtons.length).toBe(2);
+    for (const b of notStartedButtons) expect(b).toBeDisabled();
+    // The active habit still has its normal action enabled.
+    expect(screen.getByRole("button", { name: /complete today/i })).toBeEnabled();
+  });
+
+  it("exits the loading state and shows an error when the habit fetch fails", async () => {
+    const handlers: Record<string, Handler> = {
+      "/api/auth/me": meHandler["/api/auth/me"],
+      "/api/habits": () => ({ status: 500, json: { error: { code: "SERVER_ERROR", message: "boom" } } }),
+    };
+    installFetchStub(handlers);
+    renderDashboard();
+    // Never stuck on "Loading your habits…" — the error alert appears.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/boom/i);
+    expect(screen.queryByText(/loading your habits/i)).not.toBeInTheDocument();
+  });
 });

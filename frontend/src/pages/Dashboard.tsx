@@ -166,6 +166,9 @@ export default function Dashboard() {
   }
 
   const today = todayLocal();
+  // A habit whose startDate is in the future hasn't started yet: show a
+  // "Starts …" state instead of a streak, and disable its tracking action.
+  const notStarted = (h: Habit) => h.startDate > today;
 
   async function handleToggleComplete(habit: Habit, date: string) {
     if (!token) return;
@@ -196,6 +199,21 @@ export default function Dashboard() {
   }
 
   if (habits === null) {
+    // No habits loaded yet. If the fetch failed, show the error instead of
+    // the loading screen — never stuck on "Loading your habits…" forever.
+    if (error !== null) {
+      return (
+        <div className="shell">
+          <AppHeader />
+          <main className="shell-main">
+            <p role="alert" className="alert alert-error">
+              <AlertIcon size={16} />
+              <span>{error}</span>
+            </p>
+          </main>
+        </div>
+      );
+    }
     return (
       <div className="shell">
         <AppHeader />
@@ -277,7 +295,12 @@ export default function Dashboard() {
                     </div>
                     <span className="habit-meta">Since {h.startDate}</span>
 
-                    {h.type === "BUILD" ? (
+                    {notStarted(h) ? (
+                      <div className="habit-metric">
+                        <span className="habit-metric-value">—</span>
+                        <span className="habit-metric-label">Starts {h.startDate}</span>
+                      </div>
+                    ) : h.type === "BUILD" ? (
                       <div className="habit-metric">
                         <span className="habit-metric-value">{h.stats.currentStreak ?? 0}</span>
                         <span className="habit-metric-label">
@@ -330,19 +353,21 @@ export default function Dashboard() {
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
-                          disabled={busyId === h.id}
+                          disabled={busyId === h.id || notStarted(h)}
                           onClick={() => void handleToggleComplete(h, today)}
                         >
-                          <CheckIcon size={14} /> {busyId === h.id ? "Saving…" : "Complete today"}
+                          <CheckIcon size={14} />{" "}
+                          {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Complete today"}
                         </button>
                       ) : (
                         <button
                           type="button"
                           className="btn btn-danger btn-sm"
-                          disabled={busyId === h.id}
+                          disabled={busyId === h.id || notStarted(h)}
                           onClick={() => void handleRelapse(h, today)}
                         >
-                          <FlameIcon size={14} /> {busyId === h.id ? "Saving…" : "Record relapse"}
+                          <FlameIcon size={14} />{" "}
+                          {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Record relapse"}
                         </button>
                       )}
                       <Link to={`/habits/${h.id}`} className="btn btn-secondary btn-sm">

@@ -40,6 +40,10 @@ export function weeklyStats(startDate: string, refDate: string, completedDates: 
   weekCompletionRate: number;
   missedDays: number;
 } {
+  // Future-start habit: startDate after refDate → no days eligible yet.
+  if (startDate > refDate) {
+    return { weekCompleted: 0, weekElapsedDays: 0, weekCompletionRate: 0, missedDays: 0 };
+  }
   const lower = mondayOfWeek(refDate) > startDate ? mondayOfWeek(refDate) : startDate;
   const eligible = dayDiff(lower, refDate) + 1;
   const completed = completedDates.filter((d) => d >= lower && d <= refDate).length;
