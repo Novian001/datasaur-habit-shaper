@@ -395,3 +395,97 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 0.95rem;
 }
+
+/* ---------- goals (Phase 9) ---------- */
+
+.shell-nav {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.shell-nav-current {
+  font-weight: 600;
+  background: #f0f0f2;
+  cursor: default;
+}
+
+.field textarea,
+.field select {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.field textarea:focus,
+.field select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+.goal-list {
+  list-style: none;
+  margin: 0.5rem 0 2rem;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.goal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.goal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.goal-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.goal-habit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.goal-desc {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.goal-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.goal-actions form {
+  width: 100%;
+}
+
+.goal-card form.create-form {
+  width: 100%;
+}

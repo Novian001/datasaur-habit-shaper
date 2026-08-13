@@ -689,3 +689,26 @@ commit must exist before any application code.
 - Served bundle confirmed = new build (index-CIlMbuzK.js contains dashboard code).
 
 **Known environment notes:** Docker Desktop daemon dropped twice mid-Phase-8 (pipe dockerDesktopLinuxEngine); recovery = taskkill + relaunch + poll, no data loss. Script bug in first smoke run (ownership check missing `?refDate=`) — backend correctly returned 400; fixed script, not product code.
+---
+
+## Phase 9 — Goal management frontend
+
+**Status:** complete, verified, committed, pushed. Commit `feat(frontend): implement goal management`.
+
+**Scope:** goal list + create + inline edit + delete through the authenticated UI; each goal linked to exactly one owned habit (BUILD or BREAK); loading/empty/no-habits/validation/error states; responsive. No deadlines/progress/status/priority/reminders/numeric targets/checklists/subtasks/tags/sharing/analytics/notifications/gamification (A6 — goal model underspecified, deliberately). No backend/schema change; backend goal routes are Phase 6's (`eaa8d07`), exercised unchanged.
+
+**Files:**
+- NEW `frontend/src/api/goals.ts` — typed goal API: `Goal`/`GoalInput` types; `listGoals` (GET `/api/goals`), `createGoal` (POST), `updateGoal` (PATCH `/api/goals/:id`), `deleteGoal` (DELETE); relative `/api` paths, token via apiRequest.
+- NEW `frontend/src/pages/Goals.tsx` — GoalsPage: create form (title required ≤200, description ≤1000, linked-habit select from owned habits labeled "Name — BUILD/BREAK"), inline edit form (title/description/relink), delete with `window.confirm`, `role="alert"` errors, buttons disabled while busy, loading/empty states, no-habits explanatory state, BUILD/BREAK badges.
+- MOD `frontend/src/App.tsx` — `/goals` route under ProtectedRoute → GoalsPage.
+- MOD `frontend/src/api/client.ts` — `RequestOptions.method` union gained `"PATCH"` (required by the Phase 6 goals contract).
+- MOD `frontend/src/pages/Dashboard.tsx`, `frontend/src/pages/HabitDetail.tsx` — shell nav (Dashboard + Goals links) replacing static span; "← Back" link in detail page.
+- MOD `frontend/src/index.css` — +94 lines Phase 9 styles (`.shell-nav`, goal cards, form fields).
+- NEW `frontend/src/test/goals-flow.test.tsx` — 15 jsdom tests (route protection, empty state, create with BUILD/BREAK selector, no-habits state, validation errors, edit/relink/clear-description/delete, logout), same fetch-stub pattern as auth-flow.
+
+**Verification (all actually run):**
+- Backend canonical suite: 114/114 (5 files, unchanged backend).
+- Frontend gates: `npx tsc --noEmit` exit 0; `npm test` 25/25 (10 auth-flow + 15 goals-flow); `npm run build` OK.
+- nginx :3000 E2E smoke (throwaway `p9-*@example.com` users, deleted after; 26/26 checks): register + auth/me; create BUILD + BREAK habits; create goal linked to BUILD (embedded habit type BUILD); create goal linked to BREAK (type BREAK); list 2 goals with embedded habit; edit title; edit description; clear description (null); relink BUILD→BREAK (habitId + type changed); foreign habit relink → 404 (ownership, D7); delete goal → 204, 1 goal remains, deleted goal gone, both habits still exist; completion regression PUT 201 → idempotent 200 → stats currentStreak 1 → undo 204; unauthenticated /api/goals → 401. Cleanup verified 0 remaining p9- users.
+
+**Harness correction (honest record):** the first Phase 9 E2E draft used an incorrect completion regression request — POST `/habits/:id/completions/:date` with the date in the URL path and no body. The committed contract (backend/src/routes/tracking.ts) is PUT `/habits/:id/completions` with body `{ date, refDate }` (201 first, 200 idempotent repeat, D2; no server clock, D8). The harness was corrected to the established PUT contract with explicit calendar dates (`date=refDate=backend-container-local-date`) before the final run; no backend route was changed and there was never a backend goal defect — the failing line was harness-only.

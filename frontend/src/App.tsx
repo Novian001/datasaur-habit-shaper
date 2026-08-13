@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import HabitDetailPage from "./pages/HabitDetail";
+import GoalsPage from "./pages/Goals";
 
 // Authenticated users visiting /login or /register are redirected to the
 // protected shell (STEP 8). Implemented with a tiny wrapper instead of
@@ -57,6 +58,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <HabitDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/goals"
+        element={
+          <ProtectedRoute>
+            <GoalsPage />
           </ProtectedRoute>
         }
       />

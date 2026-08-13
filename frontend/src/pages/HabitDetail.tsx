@@ -82,9 +82,16 @@ export default function HabitDetailPage() {
     <div className="dashboard">
       <header className="shell-header">
         <span className="shell-brand">Habit Shaper</span>
-        <span className="shell-user">Habit detail</span>
+        <nav className="shell-nav">
+          <Link to="/" className="btn-ghost">
+            Dashboard
+          </Link>
+          <Link to="/goals" className="btn-ghost">
+            Goals
+          </Link>
+        </nav>
         <Link to="/" className="btn-ghost">
-          ← Dashboard
+          ← Back
         </Link>
       </header>
       <main className="shell-main">

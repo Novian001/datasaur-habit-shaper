@@ -19,7 +19,7 @@ export class ApiClientError extends Error {
 export type RequestOptions = {
   token?: string | null;
   body?: unknown;
-  method?: "GET" | "POST" | "PUT" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 };
 
 // Parses the backend's uniform error shape; falls back to a safe generic

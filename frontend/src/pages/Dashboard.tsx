@@ -108,7 +108,12 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="shell-header">
         <span className="shell-brand">Habit Shaper</span>
-        <span className="shell-user">Dashboard</span>
+        <nav className="shell-nav">
+          <span className="btn-ghost shell-nav-current">Dashboard</span>
+          <Link to="/goals" className="btn-ghost">
+            Goals
+          </Link>
+        </nav>
         <button type="button" className="btn-ghost" onClick={handleLogout}>
           Logout
         </button>
