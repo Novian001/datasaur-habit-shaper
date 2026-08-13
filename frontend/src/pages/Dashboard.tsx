@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, errorMessage } from "../context/AuthContext";
 import { todayLocal } from "../lib/date";
@@ -12,20 +12,163 @@ import {
 } from "../api/habits";
 import AppHeader, { CheckIcon, FlameIcon, AlertIcon, TargetIcon } from "../components/AppHeader";
 
-// Dashboard: habit list + create form + daily completion (BUILD) and relapse
-// (BREAK) buttons (contract §2–§4). Dates are the browser's local calendar
-// date (D8). This is Phase 8 scope — goals UI is Phase 9.
+// Dashboard: habit list + daily completion (BUILD) and relapse (BREAK)
+// buttons (contract §2–§4). Dates are the browser's local calendar date
+// (D8). "Add habit" opens the create form in a modal (post-redesign UX).
+
+// Create-habit modal: existing create form (name/type/start date) inside a
+// lightweight dialog — same API contract, no new fields, Verdana styling.
+function CreateHabitModal({
+  open,
+  creating,
+  createError,
+  onOpen,
+  onClose,
+  onCreate,
+}: {
+  open: boolean;
+  creating: boolean;
+  createError: string | null;
+  onOpen: () => void;
+  onClose: () => void;
+  onCreate: (name: string, type: HabitType, startDate: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<HabitType>("BUILD");
+  const [startDate, setStartDate] = useState(todayLocal());
+  const nameRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // Focus: into the first field when opened; back to the trigger when
+  // closed. Skipped on initial mount (open=false) so page load keeps its
+  // natural focus. Reset the form on close so the next open is fresh.
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      nameRef.current?.focus();
+    } else if (wasOpen.current) {
+      wasOpen.current = false;
+      triggerRef.current?.focus();
+      setName("");
+      setType("BUILD");
+      setStartDate(todayLocal());
+    }
+  }, [open]);
+
+  // Escape closes unless a submission is in flight.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !creating) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, creating, onClose]);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onCreate(name.trim(), type, startDate);
+  }
+
+  return (
+    <>
+      <div className="page-head-row">
+        <div>
+          <h1>Today&apos;s habits</h1>
+          <p>Keep your daily rhythm — a quick view of what to build and what to break.</p>
+        </div>
+        <button ref={triggerRef} type="button" className="btn btn-primary" onClick={onOpen}>
+          + Add habit
+        </button>
+      </div>
+
+      {open && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !creating) onClose();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-habit-title"
+            className="modal"
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="create-habit-title">Add a new habit</h2>
+                <p className="section-sub">
+                  Choose something you want to build consistently or leave behind.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                aria-label="Close dialog"
+                disabled={creating}
+                onClick={onClose}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="modal-form">
+              <div className="field">
+                <label htmlFor="habit-name">Name</label>
+                <input
+                  ref={nameRef}
+                  id="habit-name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={120}
+                  placeholder="e.g. Meditate, No doomscrolling"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="habit-type">Type</label>
+                <select id="habit-type" value={type} onChange={(e) => setType(e.target.value as HabitType)}>
+                  <option value="BUILD">BUILD — do more of this</option>
+                  <option value="BREAK">BREAK — stop doing this</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="habit-start">Start date</label>
+                <input id="habit-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              </div>
+              {createError && (
+                <p role="alert" className="alert alert-error">
+                  <AlertIcon size={16} />
+                  <span>{createError}</span>
+                </p>
+              )}
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" disabled={creating} onClick={onClose}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={creating}>
+                  {creating ? "Creating…" : "Add habit"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function Dashboard() {
   const { token } = useAuth();
   const [habits, setHabits] = useState<Habit[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-
-  // Create-form state
-  const [name, setName] = useState("");
-  const [type, setType] = useState<HabitType>("BUILD");
-  const [startDate, setStartDate] = useState(todayLocal());
+  const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -43,14 +186,13 @@ export default function Dashboard() {
     void load();
   }, [load]);
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    if (!token || !name.trim()) return;
+  async function handleCreate(name: string, type: HabitType, startDate: string) {
+    if (!token || !name) return;
     setCreating(true);
     setCreateError(null);
     try {
-      await createHabit(token, { name: name.trim(), type, startDate });
-      setName("");
+      await createHabit(token, { name, type, startDate });
+      setModalOpen(false);
       await load();
       setNotice(`Created ${type.toLowerCase()} habit.`);
     } catch (err) {
@@ -111,10 +253,14 @@ export default function Dashboard() {
     <div className="shell">
       <AppHeader />
       <main className="shell-main">
-        <div className="page-intro">
-          <h1>Today&apos;s habits</h1>
-          <p>Keep your daily rhythm — a quick view of what to build and what to break.</p>
-        </div>
+        <CreateHabitModal
+          open={modalOpen}
+          creating={creating}
+          createError={createError}
+          onOpen={() => setModalOpen(true)}
+          onClose={() => setModalOpen(false)}
+          onCreate={handleCreate}
+        />
 
         {error && (
           <p role="alert" className="alert alert-error">
@@ -246,47 +392,6 @@ export default function Dashboard() {
             </ul>
           </>
         )}
-
-        <section className="create-section">
-          <h2>Create a habit</h2>
-          <p className="section-sub">Start small — you can always adjust later.</p>
-          <form onSubmit={handleCreate} className="card create-panel">
-            <div className="field">
-              <label htmlFor="habit-name">Name</label>
-              <input
-                id="habit-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={120}
-                placeholder="e.g. Meditate, No doomscrolling"
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="habit-type">Type</label>
-              <select id="habit-type" value={type} onChange={(e) => setType(e.target.value as HabitType)}>
-                <option value="BUILD">BUILD — do more of this</option>
-                <option value="BREAK">BREAK — stop doing this</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="habit-start">Start date</label>
-              <input id="habit-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-            </div>
-            {createError && (
-              <p role="alert" className="alert alert-error">
-                <AlertIcon size={16} />
-                <span>{createError}</span>
-              </p>
-            )}
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? "Creating…" : "Create habit"}
-              </button>
-            </div>
-          </form>
-        </section>
       </main>
     </div>
   );

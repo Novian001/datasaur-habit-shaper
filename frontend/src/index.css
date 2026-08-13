@@ -592,6 +592,21 @@ a:hover {
   max-width: 60ch;
 }
 
+/* heading row with a primary action (dashboard) */
+
+.page-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.page-head-row .btn {
+  flex: none;
+}
+
 /* ---------- summary strip (dashboard) ---------- */
 
 .summary-strip {
@@ -802,6 +817,78 @@ a:hover {
 }
 .form-actions .btn {
   min-width: 120px;
+}
+
+/* ---------- modal (Add habit) ---------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-5) var(--space-4);
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.modal {
+  width: 100%;
+  max-width: 500px;
+  margin: auto;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.modal-head h2 {
+  font-size: 20px;
+}
+
+.modal-head .section-sub {
+  margin: var(--space-1) 0 0;
+  color: var(--color-slate);
+  font-size: 14px;
+}
+
+.modal-close {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-slate);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion);
+}
+
+.modal-close:hover:not(:disabled) {
+  background: var(--color-bg);
+  color: var(--color-navy);
+}
+
+.modal-close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.modal-close:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ---------- empty / loading ---------- */
@@ -1056,6 +1143,12 @@ a:hover {
   }
   .habit-metric-value {
     font-size: 28px;
+  }
+  .modal-backdrop {
+    padding: var(--space-3) var(--space-2);
+  }
+  .modal {
+    padding: var(--space-4);
   }
   .form-actions .btn {
     flex: 1 1 auto;
