@@ -712,3 +712,20 @@ commit must exist before any application code.
 - nginx :3000 E2E smoke (throwaway `p9-*@example.com` users, deleted after; 26/26 checks): register + auth/me; create BUILD + BREAK habits; create goal linked to BUILD (embedded habit type BUILD); create goal linked to BREAK (type BREAK); list 2 goals with embedded habit; edit title; edit description; clear description (null); relink BUILD→BREAK (habitId + type changed); foreign habit relink → 404 (ownership, D7); delete goal → 204, 1 goal remains, deleted goal gone, both habits still exist; completion regression PUT 201 → idempotent 200 → stats currentStreak 1 → undo 204; unauthenticated /api/goals → 401. Cleanup verified 0 remaining p9- users.
 
 **Harness correction (honest record):** the first Phase 9 E2E draft used an incorrect completion regression request — POST `/habits/:id/completions/:date` with the date in the URL path and no body. The committed contract (backend/src/routes/tracking.ts) is PUT `/habits/:id/completions` with body `{ date, refDate }` (201 first, 200 idempotent repeat, D2; no server clock, D8). The harness was corrected to the established PUT contract with explicit calendar dates (`date=refDate=backend-container-local-date`) before the final run; no backend route was changed and there was never a backend goal defect — the failing line was harness-only.
+
+---
+
+## Phase 10 — Full test suite
+
+**Status:** complete, verified, committed, pushed. Commit `test(e2e): add full nginx E2E smoke harness`.
+
+**Scope:** consolidate the end-to-end verification harness used across phases into the repo, alongside the already-committed canonical suites. No product code, backend, or schema changes — this phase is verification infrastructure only.
+
+**Files:**
+- NEW `hermes-verify-phase9-e2e.sh` — nginx :3000 E2E smoke harness (26 checks): register + auth/me; create BUILD + BREAK habits; create goal linked to BUILD (embedded habit type BUILD) and to BREAK; list 2 goals with embedded habit; edit title; edit description; clear description (null); relink BUILD→BREAK (habitId + type changed); foreign habit relink → 404 (ownership, D7); delete goal → 204, 1 goal remains, deleted goal gone, both habits still exist; completion regression PUT 201 → idempotent 200 → stats currentStreak 1 → undo 204; unauthenticated /api/goals → 401; cleanup of throwaway user. Throwaway `p9-*@example.com` credentials; no passwords/JWTs printed.
+
+**Canonical suites (already committed in prior phases, re-verified here):**
+- Backend: `docker compose -f compose.yml -f compose.test.yml run --rm backend-test` → **114/114** (5 files: 15 auth + 16 habits + 22 tracking + 35 stats + 26 goals), ~28s.
+- Frontend: `npx tsc --noEmit` exit 0; `npm test` → **25/25** (10 auth-flow + 15 goals-flow); `npm run build` OK.
+
+**Harness correction (honest record):** the first Phase 9 E2E draft used an incorrect completion regression request — POST `/habits/:id/completions/:date` with the date in the URL path and no body. The committed contract (backend/src/routes/tracking.ts) is PUT `/habits/:id/completions` with body `{ date, refDate }` (201 first, 200 idempotent repeat, D2; no server clock, D8). The harness was corrected to the established PUT contract with explicit calendar dates before the final run; no backend route was changed and there was never a backend goal defect — the failing line was harness-only.
