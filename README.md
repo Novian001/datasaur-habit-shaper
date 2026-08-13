@@ -61,9 +61,9 @@ docker compose up -d     # fresh database
 
 - **Backend** (Vitest + Supertest, real Express + test MySQL):
   `docker compose -f compose.yml -f compose.test.yml run --rm backend-test`
-  → 114/114
+  → 118/118 PASS
 - **Frontend** (Vitest + jsdom + Testing Library): `cd frontend && npm test`
-  → 25/25; `npx tsc --noEmit` clean; `npm run build` OK
+  → 47/47 PASS; `npx tsc --noEmit` clean; `npm run build` OK
 - **E2E smoke** (through nginx :3000): `bash hermes-verify-phase9-e2e.sh`
   → 26/26
 
