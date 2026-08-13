@@ -795,3 +795,25 @@ commit must exist before any application code.
 **Environment note:** Docker Desktop remained flaky through this phase (daemon dropped repeatedly mid-run). Recovered each time via taskkill → `wsl --shutdown` → relaunch → daemon poll. E2E failures caused by daemon drops (nginx 000, empty responses) were distinguished from product failures; final run green.
 
 **Feature freeze:** The Verdana Health redesign changed presentation and usability only. No product functionality, API contract, or database behavior was added or changed. Feature freeze remains active.
+
+---
+
+## Phase 14 — Habit Creation Date Semantics (Backdating Prevention)
+
+**Status:** complete, verified, uncommitted (working tree).
+
+**Decision:** New habits default to the browser-local current date, may be scheduled for the future, and cannot be backdated from the creation UI.
+
+**Rationale:** Avoid creating implied historical missed/clean days without tracking evidence while retaining intentional future planning.
+
+**Scope:** Frontend-only hardening of the Add Habit modal (`frontend/src/pages/Dashboard.tsx`). `startDate == localToday` allowed; `startDate > localToday` allowed (future planning); `startDate < localToday` rejected with a clear `role="alert"` message ("Start date cannot be before today.") and no API request is sent. The date input is defaulted to `todayLocal()` and given `min={todayLocal()}`, with helper text "Start today or choose a future date." The guard reuses the existing browser-local date helper (`getFullYear/getMonth/getDate`, no `toISOString`/UTC shift) already used by Dashboard tracking.
+
+**Existing historical habits remain valid and untouched.** The restriction applies to new creation only; no global `startDate >= current date` rule was introduced. Habits with past startDate keep their historical completions, streaks, and clean-streak counting exactly as before (verified: past-start BREAK with no relapse still yields cleanStreak = dayDiff(startDate, refDate)+1, e.g. start Aug 10 / ref Aug 13 → 4).
+
+**Explicit non-goals:** No backend changes. The backend intentionally avoids server-clock business semantics; the frontend restriction is sufficient because "today" is defined by the user's local device calendar. No API contract change, no schema/migration change, no new fields, no cron/activation/reminders/notification infrastructure, no new status fields. Future-start habits rely on the existing startDate/refDate calculation (already supported since the stats fix) and render as not-started (BUILD: streak 0, completed 0, missed 0, action disabled; BREAK: cleanStreak 0, action disabled) until their start date.
+
+**PDF compatibility:** Restricting a newly-created habit from starting before the user's local creation date is an implementation design decision. The Datasaur PDF does not define startDate/backdating semantics. The required BUILD daily completion/streak/weekly metrics and BREAK clean-streak/relapse behaviors remain unchanged.
+
+**Files:** `frontend/src/pages/Dashboard.tsx` (+18: min, helper text, guard, alert), `frontend/src/index.css` (+5: `.field-error-message`), `frontend/src/test/dashboard.test.tsx` (+64: 3 new tests).
+
+**Verification:** Frontend `npx tsc --noEmit` clean; `npm test` 47/47 (baseline 44/44 + 3); `npm run build` clean. Backend regression 118/118 (no backend source changes). Nginx smoke `hermes-verify-backdate.sh` 14/14: bundle markers, register, BUILD/BREAK today + future all 201, list 200, future BUILD streak 0 / missed 0, complete-today 201 → active streak 1, pre-start completion 400, user cleanup. Real-browser verification via localhost:3000: modal defaults to local today with `min` set, past date shows the alert and blocks submit (no POST), today-start BUILD and future-start BUILD/BREAK create correctly, future habits render "Not started" with disabled actions, active habit complete → streak 1, dashboard renders without error. Throwaway data cleaned up.

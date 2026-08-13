@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { AuthProvider } from "../context/AuthContext";
+import { todayLocal } from "../lib/date";
 import App from "../App";
 
 // Dashboard habit-creation modal tests. Same in-memory fetch stub pattern as
@@ -343,5 +344,68 @@ describe("Dashboard — add habit modal", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/boom/i);
     expect(screen.queryByText(/loading your habits/i)).not.toBeInTheDocument();
+  });
+
+  it("defaults the start date to browser-local today and sets the input min", async () => {
+    installFetchStub(habitsHandlers());
+    const user = userEvent.setup();
+    await renderDashboard();
+
+    await user.click(screen.getByRole("button", { name: /add habit/i }));
+    const dialog = await screen.findByRole("dialog");
+    const input = within(dialog).getByLabelText(/start date/i) as HTMLInputElement;
+
+    // Default = local today via the same helper the Dashboard uses.
+    expect(input.value).toBe(todayLocal());
+    // The picker cannot choose a date before local today.
+    expect(input).toHaveAttribute("min", todayLocal());
+    // Helper text present.
+    expect(within(dialog).getByText(/start today or choose a future date/i)).toBeInTheDocument();
+  });
+
+  it("rejects a past start date client-side without calling the API", async () => {
+    const { calls } = installFetchStub(habitsHandlers());
+    const user = userEvent.setup();
+    await renderDashboard();
+
+    await user.click(screen.getByRole("button", { name: /add habit/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/name/i), "Backdated habit");
+    // Force a past date via the input's onChange (bypasses the picker min).
+    const input = within(dialog).getByLabelText(/start date/i) as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "2026-08-12"); // before local today (2026-08-13)
+
+    // Validation message appears; no POST to /api/habits.
+    expect(within(dialog).getByRole("alert")).toHaveTextContent(/start date cannot be before today/i);
+    expect(calls.some((c) => c.path === "/api/habits" && c.method === "POST")).toBe(false);
+  });
+
+  it("accepts today and a future start date", async () => {
+    const handlers = habitsHandlers();
+    const { calls } = installFetchStub(handlers);
+    const user = userEvent.setup();
+    await renderDashboard();
+
+    // Today start.
+    await user.click(screen.getByRole("button", { name: /add habit/i }));
+    let dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/name/i), "Today Habit");
+    await user.click(within(dialog).getByRole("button", { name: /^add habit$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(calls.some((c) => c.path === "/api/habits" && c.method === "POST")).toBe(true);
+    expect(await screen.findByText("Today Habit")).toBeInTheDocument();
+
+    // Future start (2026-12-31, after local today) — accepted, no error.
+    await user.click(screen.getByRole("button", { name: /add habit/i }));
+    dialog = await screen.findByRole("dialog");
+    await user.type(within(dialog).getByLabelText(/name/i), "Future Habit");
+    const input = within(dialog).getByLabelText(/start date/i) as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "2026-12-31");
+    await user.click(within(dialog).getByRole("button", { name: /^add habit$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await screen.findByText("Future Habit")).toBeInTheDocument();
+    expect(screen.queryByText(/start date cannot be before today/i)).not.toBeInTheDocument();
   });
 });

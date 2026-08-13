@@ -56,6 +56,9 @@ function CreateHabitModal({
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
+    // Backdating guard: a new habit must not start before the user's local
+    // calendar today (future planning is allowed). Never submit a past date.
+    if (startDate && startDate < todayLocal()) return;
     onCreate(name.trim(), type, startDate);
   }
 
@@ -103,7 +106,20 @@ function CreateHabitModal({
           </div>
           <div className="field">
             <label htmlFor="habit-start">Start date</label>
-            <input id="habit-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+            <input
+              id="habit-start"
+              type="date"
+              value={startDate}
+              min={todayLocal()}
+              onChange={(e) => setStartDate(e.target.value)}
+              required
+            />
+            <p className="helper">Start today or choose a future date.</p>
+            {startDate && startDate < todayLocal() && (
+              <p role="alert" className="field-error-message">
+                Start date cannot be before today.
+              </p>
+            )}
           </div>
           {createError && (
             <p role="alert" className="alert alert-error">
