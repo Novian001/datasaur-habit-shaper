@@ -79,6 +79,37 @@ G=$(curl -s -i -X POST "$BASE/api/goals" -H "Authorization: Bearer $TOK" -H 'Con
 S=$(status_of "$BASE/api/goals" -H "Authorization: Bearer $TOK")
 [ "$S" = "200" ] && ok "goals list 200" || bad "goals list got $S"
 
+echo "== 10b. goal modal present, inline create panel gone =="
+HTML=$(curl -s "$BASE/")
+BUNDLE=$(echo "$HTML" | grep -o 'assets/index-[^"]*\.js' | head -1)
+BODY=$(curl -s "$BASE/$BUNDLE")
+[ "$(echo \"$BODY\" | grep -c 'Add a new goal')" -ge 1 ] && ok "bundle has 'Add a new goal' modal" || bad "bundle missing goal modal marker"
+[ "$(echo \"$BODY\" | grep -c 'Create a goal')" -eq 0 ] && ok "inline 'Create a goal' panel gone" || bad "inline create panel still in bundle"
+[ "$(echo \"$BODY\" | grep -c '+ Add goal')" -ge 1 ] && ok "bundle has '+ Add goal' CTA" || bad "bundle missing Add goal CTA"
+
+echo "== 10c. goal modal payloads (create BUILD-linked + BREAK-linked) =="
+G1=$(curl -s -i -X POST "$BASE/api/goals" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"habitId\":$BID,\"title\":\"Goal build ${TS}\",\"description\":\"linked to build\"}" | head -1 | tr -d '\r' | awk '{print $2}')
+[ "$G1" = "201" ] && ok "BUILD-linked goal 201" || bad "BUILD-linked goal got $G1"
+G2=$(curl -s -i -X POST "$BASE/api/goals" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"habitId\":$KID,\"title\":\"Goal break ${TS}\"}" | head -1 | tr -d '\r' | awk '{print $2}')
+[ "$G2" = "201" ] && ok "BREAK-linked goal 201" || bad "BREAK-linked goal got $G2"
+
+echo "== 10d. edit goal (title + clear description + relink) =="
+GID=$(curl -s "$BASE/api/goals" -H "Authorization: Bearer $TOK" | python -c "import sys,json; gs=json.load(sys.stdin)['goals']; print([g['id'] for g in gs if g['title'].startswith('Goal build')][0])")
+S=$(status_of -X PATCH "$BASE/api/goals/$GID" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"title\":\"Goal build edited ${TS}\",\"description\":null}")
+[ "$S" = "200" ] && ok "edit title + clear description 200" || bad "edit got $S"
+S=$(status_of -X PATCH "$BASE/api/goals/$GID" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"habitId\":$KID}")
+[ "$S" = "200" ] && ok "relink to BREAK 200" || bad "relink got $S"
+
+echo "== 10e. delete goal, linked habit intact =="
+S=$(status_of -X DELETE "$BASE/api/goals/$GID" -H "Authorization: Bearer $TOK")
+[ "$S" = "204" ] && ok "goal delete 204" || bad "goal delete got $S"
+S=$(status_of "$BASE/api/habits/$BID?refDate=$TODAY" -H "Authorization: Bearer $TOK")
+[ "$S" = "200" ] && ok "linked habit intact after delete" || bad "habit after delete got $S"
+
 echo "== 11. login after session discard (client-side logout) =="
 S=$(status_of -X POST "$BASE/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}")

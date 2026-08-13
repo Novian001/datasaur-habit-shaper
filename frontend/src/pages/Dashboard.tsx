@@ -11,6 +11,7 @@ import {
   type HabitType,
 } from "../api/habits";
 import AppHeader, { CheckIcon, FlameIcon, AlertIcon, TargetIcon } from "../components/AppHeader";
+import Modal from "../components/Modal";
 
 // Dashboard: habit list + daily completion (BUILD) and relapse (BREAK)
 // buttons (contract §2–§4). Dates are the browser's local calendar date
@@ -38,33 +39,19 @@ function CreateHabitModal({
   const [startDate, setStartDate] = useState(todayLocal());
   const nameRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const wasOpen = useRef(false);
 
-  // Focus: into the first field when opened; back to the trigger when
-  // closed. Skipped on initial mount (open=false) so page load keeps its
-  // natural focus. Reset the form on close so the next open is fresh.
+  // Reset the form on close so the next open is fresh.
   useEffect(() => {
-    if (open) {
-      wasOpen.current = true;
-      nameRef.current?.focus();
-    } else if (wasOpen.current) {
-      wasOpen.current = false;
-      triggerRef.current?.focus();
+    if (!open) {
       setName("");
       setType("BUILD");
       setStartDate(todayLocal());
+    } else {
+      // Focus the first field when opened (the shell also focuses the
+      // dialog as a fallback; the field focus wins for direct entry).
+      nameRef.current?.focus();
     }
   }, [open]);
-
-  // Escape closes unless a submission is in flight.
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !creating) onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, creating, onClose]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,80 +71,56 @@ function CreateHabitModal({
         </button>
       </div>
 
-      {open && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !creating) onClose();
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="create-habit-title"
-            className="modal"
-          >
-            <div className="modal-head">
-              <div>
-                <h2 id="create-habit-title">Add a new habit</h2>
-                <p className="section-sub">
-                  Choose something you want to build consistently or leave behind.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="modal-close"
-                aria-label="Close dialog"
-                disabled={creating}
-                onClick={onClose}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="modal-form">
-              <div className="field">
-                <label htmlFor="habit-name">Name</label>
-                <input
-                  ref={nameRef}
-                  id="habit-name"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={120}
-                  placeholder="e.g. Meditate, No doomscrolling"
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="habit-type">Type</label>
-                <select id="habit-type" value={type} onChange={(e) => setType(e.target.value as HabitType)}>
-                  <option value="BUILD">BUILD — do more of this</option>
-                  <option value="BREAK">BREAK — stop doing this</option>
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="habit-start">Start date</label>
-                <input id="habit-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-              </div>
-              {createError && (
-                <p role="alert" className="alert alert-error">
-                  <AlertIcon size={16} />
-                  <span>{createError}</span>
-                </p>
-              )}
-              <div className="form-actions">
-                <button type="button" className="btn btn-secondary" disabled={creating} onClick={onClose}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? "Creating…" : "Add habit"}
-                </button>
-              </div>
-            </form>
+      <Modal
+        open={open}
+        busy={creating}
+        titleId="create-habit-title"
+        title="Add a new habit"
+        supporting="Choose something you want to build consistently or leave behind."
+        onClose={onClose}
+        triggerRef={triggerRef}
+      >
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="field">
+            <label htmlFor="habit-name">Name</label>
+            <input
+              ref={nameRef}
+              id="habit-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={120}
+              placeholder="e.g. Meditate, No doomscrolling"
+              required
+            />
           </div>
-        </div>
-      )}
+          <div className="field">
+            <label htmlFor="habit-type">Type</label>
+            <select id="habit-type" value={type} onChange={(e) => setType(e.target.value as HabitType)}>
+              <option value="BUILD">BUILD — do more of this</option>
+              <option value="BREAK">BREAK — stop doing this</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="habit-start">Start date</label>
+            <input id="habit-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+          </div>
+          {createError && (
+            <p role="alert" className="alert alert-error">
+              <AlertIcon size={16} />
+              <span>{createError}</span>
+            </p>
+          )}
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" disabled={creating} onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={creating}>
+              {creating ? "Creating…" : "Add habit"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </>
   );
 }

@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AuthProvider, getStoredToken } from "../context/AuthContext";
 import App from "../App";
 
-// Phase 9 goals UI tests. Same in-memory fetch stub pattern as
-// auth-flow.test.tsx — synthetic tokens, no live backend.
+// Phase 9 goals UI tests + modal-create coverage. Same in-memory fetch stub
+// pattern as auth-flow.test.tsx — synthetic tokens, no live backend.
 
 type FetchCall = { path: string; body: unknown; method: string };
 
@@ -134,6 +134,12 @@ function getEditForm(): HTMLFormElement {
   return input.closest("form") as HTMLFormElement;
 }
 
+// Open the create modal and return the dialog element.
+async function openCreateDialog() {
+  await userEvent.click(screen.getByRole("button", { name: /add goal/i }));
+  return await screen.findByRole("dialog", { name: /add a new goal/i });
+}
+
 describe("Phase 9 goals", () => {
   it("1. goals route is protected", async () => {
     installFetchStub(meHandler);
@@ -141,7 +147,7 @@ describe("Phase 9 goals", () => {
     expect(await screen.findByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
   });
 
-  it("2. empty goals state renders", async () => {
+  it("2. page is content-first: no permanent create form, Add goal CTA present", async () => {
     installFetchStub({
       "/api/auth/me": meHandler["/api/auth/me"],
       "/api/habits?refDate=": () => ({
@@ -155,20 +161,27 @@ describe("Phase 9 goals", () => {
     renderGoals();
     expect(await screen.findByRole("heading", { name: /^goals$/i })).toBeInTheDocument();
     expect(screen.getByText(/no goals yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /create goal/i })).toBeInTheDocument();
+    // no permanently visible create form on the page
+    expect(screen.queryByLabelText(/title/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create goal/i })).not.toBeInTheDocument();
+    // CTA exists
+    expect(screen.getByRole("button", { name: /add goal/i })).toBeInTheDocument();
   });
 
-  it("3. create form renders with owned habit selector (BUILD + BREAK)", async () => {
+  it("3. Add goal opens an accessible dialog with BUILD + BREAK habits", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
-    expect(await screen.findByRole("heading", { name: /^goals$/i })).toBeInTheDocument();
-    const select = screen.getByLabelText(/linked habit/i);
+    await screen.findByRole("heading", { name: /^goals$/i });
+    const dialog = await openCreateDialog();
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    const select = within(dialog).getByLabelText(/linked habit/i);
     expect(select).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /meditate — build/i })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /smoking — break/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /meditate — build/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: /smoking — break/i })).toBeInTheDocument();
   });
 
-  it("4. no-habits state explains a habit is required", async () => {
+  it("4. no-habits state explains a habit is required (no Add goal CTA)", async () => {
     installFetchStub({
       "/api/auth/me": meHandler["/api/auth/me"],
       "/api/habits?refDate=": () => ({ status: 200, json: { habits: [] } }),
@@ -176,17 +189,18 @@ describe("Phase 9 goals", () => {
     });
     renderGoals();
     expect(await screen.findByText(/create a habit before adding a goal/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /create goal/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add goal/i })).not.toBeInTheDocument();
   });
 
   it("5. create goal posts habitId + title + description (no userId)", async () => {
     const { calls } = installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
     await userEvent.type(screen.getByLabelText(/title/i), "Quit smoking");
     await userEvent.type(screen.getByLabelText(/description/i), "No cigarettes");
     await userEvent.selectOptions(screen.getByLabelText(/linked habit/i), "2");
-    await userEvent.click(screen.getByRole("button", { name: /create goal/i }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: /add a new goal/i })).getByRole("button", { name: /add goal/i }));
 
     await waitFor(() => {
       const post = calls.find((c) => c.path === "/api/goals" && c.method === "POST");
@@ -196,20 +210,23 @@ describe("Phase 9 goals", () => {
     });
   });
 
-  it("6. create goal success refreshes the list", async () => {
+  it("6. create goal success closes dialog and refreshes the list", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
     await userEvent.type(screen.getByLabelText(/title/i), "Run 5k");
     await userEvent.selectOptions(screen.getByLabelText(/linked habit/i), "1");
-    await userEvent.click(screen.getByRole("button", { name: /create goal/i }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: /add a new goal/i })).getByRole("button", { name: /add goal/i }));
 
     expect(await screen.findByText(/goal created/i)).toBeInTheDocument();
+    // dialog closed
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     // list refreshed — the pre-existing goal is still there
     expect(await screen.findByText(/meditate daily/i)).toBeInTheDocument();
   });
 
-  it("7. create API error shows safely", async () => {
+  it("7. create API error keeps dialog open, shows error, keeps values", async () => {
     installFetchStub({
       ...goalsHandlers(),
       // Override the collection key: GET list ok, POST fails validation.
@@ -220,10 +237,14 @@ describe("Phase 9 goals", () => {
     });
     renderGoals();
     await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
     await userEvent.type(screen.getByLabelText(/title/i), "X");
     await userEvent.selectOptions(screen.getByLabelText(/linked habit/i), "1");
-    await userEvent.click(screen.getByRole("button", { name: /create goal/i }));
+    await userEvent.click(within(screen.getByRole("dialog", { name: /add a new goal/i })).getByRole("button", { name: /add goal/i }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Title is required");
+    // dialog still open, values kept
+    expect(screen.getByRole("dialog", { name: /add a new goal/i })).toBeInTheDocument();
+    expect((screen.getByLabelText(/title/i) as HTMLInputElement).value).toBe("X");
   });
 
   it("8. goal list renders embedded linked habit data", async () => {
@@ -237,7 +258,70 @@ describe("Phase 9 goals", () => {
     expect(within(card).getByText("BUILD")).toBeInTheDocument();
   });
 
-  it("9. edit goal title saves", async () => {
+  it("9. dialog closes via X", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    await userEvent.click(screen.getByRole("button", { name: /close dialog/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("10. dialog closes via Cancel", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("11. dialog closes via Escape", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("12. dialog closes via backdrop click", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    // click the backdrop itself (outside the dialog panel)
+    const backdrop = document.querySelector(".modal-backdrop")!;
+    await userEvent.click(backdrop);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("13. form resets after successful create (reopen is fresh)", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    await userEvent.type(screen.getByLabelText(/title/i), "Run 5k");
+    await userEvent.selectOptions(screen.getByLabelText(/linked habit/i), "1");
+    await userEvent.click(within(screen.getByRole("dialog", { name: /add a new goal/i })).getByRole("button", { name: /add goal/i }));
+    await screen.findByText(/goal created/i);
+    // reopen — form is fresh
+    await openCreateDialog();
+    expect((screen.getByLabelText(/title/i) as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/linked habit/i) as HTMLSelectElement).value).toBe("");
+  });
+
+  it("14. focus returns to Add goal trigger after close", async () => {
+    installFetchStub(goalsHandlers());
+    renderGoals();
+    await screen.findByRole("heading", { name: /^goals$/i });
+    await openCreateDialog();
+    await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /add goal/i })).toHaveFocus();
+  });
+
+  it("15. edit goal title saves", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -250,7 +334,7 @@ describe("Phase 9 goals", () => {
     expect(await screen.findByText(/goal updated/i)).toBeInTheDocument();
   });
 
-  it("10. clear description on edit sends null", async () => {
+  it("16. clear description on edit sends null", async () => {
     const { calls } = installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -266,7 +350,7 @@ describe("Phase 9 goals", () => {
     });
   });
 
-  it("11. relink goal to another owned habit", async () => {
+  it("17. relink goal to another owned habit", async () => {
     const { calls } = installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -280,7 +364,7 @@ describe("Phase 9 goals", () => {
     });
   });
 
-  it("12. delete goal confirms and removes from UI", async () => {
+  it("18. delete goal confirms and removes from UI", async () => {
     const { calls } = installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -292,7 +376,7 @@ describe("Phase 9 goals", () => {
     await waitFor(() => expect(screen.queryByText(/meditate daily/i)).not.toBeInTheDocument(), { timeout: 3000 });
   });
 
-  it("13. cancel delete (confirm=false) keeps goal", async () => {
+  it("19. cancel delete (confirm=false) keeps goal", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -301,7 +385,7 @@ describe("Phase 9 goals", () => {
     expect(screen.getByText(/meditate daily/i)).toBeInTheDocument();
   });
 
-  it("14. deleting a goal leaves the linked habit intact", async () => {
+  it("20. deleting a goal leaves the linked habit intact", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByText(/meditate daily/i);
@@ -315,7 +399,7 @@ describe("Phase 9 goals", () => {
     expect(screen.getByText(/smoking/i)).toBeInTheDocument();
   });
 
-  it("15. logout still works from goals page", async () => {
+  it("21. logout still works from goals page", async () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByRole("heading", { name: /^goals$/i });
