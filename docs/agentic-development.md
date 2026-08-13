@@ -755,3 +755,43 @@ commit must exist before any application code.
 
 **Files:**
 - MOD `README.md` — features overview, architecture, updated development status (all phases complete, feature freeze), quick start, environment, reset path, test commands (backend 114/114, frontend 25/25, E2E 26/26).
+
+---
+
+## Phase 13 — Visual Polish: Verdana Health Redesign
+
+**Status:** complete, verified, committed, pushed. Commit `style(frontend): redesign interface with Verdana Health system`.
+
+**Goal:** Improve presentation and usability after feature completion without changing product behavior.
+
+**Human Decision:** All coding-test features were complete and feature-frozen. Human approved a dedicated design-only pass using the Verdana Health design system (navy + white primary rhythm, sage reserved for interaction, Plus Jakarta Sans / DM Sans / Fira Code, 8px radius, subtle elevation). Taste Skill (`Leonxlnx/taste-skill`) was considered as guidance only; its installer requires an interactive picker that cannot run non-interactively, so the Verdana system served as the sole visual source of truth.
+
+**Scope:** Presentation and UX polish only. No product functionality, API contract, or database behavior changed.
+
+**Design audit:** Three duplicated shell headers (Dashboard/HabitDetail/Goals); 720px content width vs 1100–1200px target; no active-navigation indicator; no brand identity on auth pages; system font stack; no iconography.
+
+**Design tokens:** `:root` CSS custom properties in `frontend/src/index.css` for the full Verdana palette, typography scale, spacing (8px base), radii (4/8/12/16/full), and elevation. Sage green used only for interaction and positive states; error red reserved for semantically appropriate destructive/error contexts.
+
+**Typography:** Plus Jakarta Sans (headlines), DM Sans (body), Fira Code (tabular metrics). Fonts bundled locally as WOFF2 via Vite `?url` imports (`frontend/src/assets/fonts/`), no runtime CDN dependency; deterministic Docker build verified (fonts emitted into `dist/assets/` and served with 200 through nginx).
+
+**Navigation redesign:** New shared `frontend/src/components/AppHeader.tsx` replaces the three duplicated headers. Left: brand mark + "Habit Shaper". Nav: Dashboard | Goals via `NavLink` with active underline. Right: authenticated user email + ghost "Log out" with icon. Responsive compact wrapping on narrow screens. Dashboard, Goals, and Logout destinations preserved.
+
+**Auth redesign:** Login/Register — centered white card on the page background, brand mark, clear H1, short supporting copy, controlled max width, generous whitespace, calm inline `role="alert"` errors, loading/disabled submit states.
+
+**Dashboard redesign:** Page intro (H1 + supporting copy), restrained summary strip (total habits, BUILD count, BREAK count, done today — only data already available), Create Habit panel, habit cards with metric hierarchy: name + uppercase BUILD/BREAK chip, big tabular streak numeral with flame icon, weekly progress bar (pure CSS), primary Complete/Record action + secondary View details. Empty state "Start with one habit".
+
+**Habit Detail redesign:** Back link, hero (name + chip + since date), four stat cards (day streak, this week, completion rate, missed days), "This week" progress section, "Completed dates" list with Undo. BREAK surfaces clean streak, last relapse, relapse history — no invented metrics.
+
+**Goals redesign:** Header + supporting copy, Create Goal panel, goal cards (title, description, linked habit, BUILD/BREAK badge), Edit/Delete actions with inline editing preserved.
+
+**Iconography:** Small inline SVG components in AppHeader (24x24 viewBox, `currentColor` stroke, zero dependency): brand mark, alert, arrow-left, flame, check, logout, target, edit, trash.
+
+**Responsive/accessibility work:** Content container 1100–1200px with 24–32px gutters (16px mobile); breakpoints reviewed at 1440/1024/768/390; single column on narrow screens, no horizontal scrolling; semantic headings, label/input associations, focus-visible states, `role="alert"`, uppercase chips readable beyond color, disabled/busy button states ("Creating…"/"Saving…"), `prefers-reduced-motion` respected.
+
+**Files:** `frontend/src/index.css` (full token rewrite), `frontend/src/components/AppHeader.tsx` (new), `frontend/src/main.tsx` (import fonts.css), `frontend/src/pages/{Login,Register,Dashboard,HabitDetail,Goals}.tsx` (rewritten, same behavior), `frontend/src/assets/fonts/` (new: fetch script, CSS records, fonts.css, 13 WOFF2), `frontend/src/test/{auth-flow,goals-flow}.test.tsx` (selective copy updates: "Log out", goals empty-state text), `hermes-verify-redesign-e2e.sh` (new nginx smoke harness), this log.
+
+**Verification:** Frontend `npx tsc --noEmit` clean; `npm test` 25/25 (auth-flow 10 + goals-flow 15); `npm run build` clean with fonts emitted. Backend regression `docker compose -f compose.yml -f compose.test.yml run --rm backend-test` 114/114, no backend source changes. Real-browser visual review of Login (error alert), Register, Dashboard (empty state, summary strip, BUILD card, complete-today state change), Habit Detail, and BREAK chip via localhost:3000. Nginx functional smoke `hermes-verify-redesign-e2e.sh` 27/27: register → session restore → create BUILD/BREAK → list → complete (idempotent) → streak → undo → relapse → stats → goals create (both types) → list → edit title → clear description → relink → foreign relink 404 → delete → habit intact → logout/login → wrong password 401 → cleanup. Harness corrected mid-phase (script-only): habit/goal count assertions now use Python `len()` on the parsed array instead of comparing the list repr to `-ge`.
+
+**Environment note:** Docker Desktop remained flaky through this phase (daemon dropped repeatedly mid-run). Recovered each time via taskkill → `wsl --shutdown` → relaunch → daemon poll. E2E failures caused by daemon drops (nginx 000, empty responses) were distinguished from product failures; final run green.
+
+**Feature freeze:** The Verdana Health redesign changed presentation and usability only. No product functionality, API contract, or database behavior was added or changed. Feature freeze remains active.

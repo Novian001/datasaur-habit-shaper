@@ -175,7 +175,7 @@ describe("Phase 9 goals", () => {
       "/api/goals": () => ({ status: 200, json: { goals: [] } }),
     });
     renderGoals();
-    expect(await screen.findByText(/you need a habit before you can create a goal/i)).toBeInTheDocument();
+    expect(await screen.findByText(/create a habit before adding a goal/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /create goal/i })).not.toBeInTheDocument();
   });
 
@@ -319,7 +319,7 @@ describe("Phase 9 goals", () => {
     installFetchStub(goalsHandlers());
     renderGoals();
     await screen.findByRole("heading", { name: /^goals$/i });
-    await userEvent.click(screen.getByRole("button", { name: /logout/i }));
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
     await waitFor(() => expect(screen.getByRole("heading", { name: /welcome back/i })).toBeInTheDocument());
     expect(getStoredToken()).toBeNull();
   });

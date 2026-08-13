@@ -1,22 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth, errorMessage } from "../context/AuthContext";
 import { listHabits, type Habit } from "../api/habits";
-import {
-  listGoals,
-  createGoal,
-  updateGoal,
-  deleteGoal,
-  type Goal,
-} from "../api/goals";
+import { listGoals, createGoal, updateGoal, deleteGoal, type Goal } from "../api/goals";
+import AppHeader, { CheckIcon, AlertIcon, EditIcon, TrashIcon, TargetIcon } from "../components/AppHeader";
 
 // Goals page (contract §5): list, create, inline edit (title/description/
 // relink), delete. Habit selector is populated from the authenticated user's
 // own habits only (ownership enforced backend-side, D7). Goals UI is Phase 9;
 // no deadlines/progress/priority — the model is minimal by design (D6).
 export default function GoalsPage() {
-  const { token, logout } = useAuth();
-  const navigate = useNavigate();
+  const { token } = useAuth();
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -54,11 +48,6 @@ export default function GoalsPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  function handleLogout() {
-    logout();
-    navigate("/login", { replace: true });
-  }
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -129,43 +118,52 @@ export default function GoalsPage() {
   }
 
   if (goals === null) {
-    return <div className="page-loading">Loading goals…</div>;
+    return (
+      <div className="shell">
+        <AppHeader />
+        <main className="shell-main">
+          <div className="page-loading">Loading goals…</div>
+        </main>
+      </div>
+    );
   }
 
   return (
-    <div className="dashboard">
-      <header className="shell-header">
-        <span className="shell-brand">Habit Shaper</span>
-        <nav className="shell-nav">
-          <Link to="/" className="btn-ghost">
-            Dashboard
-          </Link>
-          <span className="btn-ghost shell-nav-current">Goals</span>
-        </nav>
-        <button type="button" className="btn-ghost" onClick={handleLogout}>
-          Logout
-        </button>
-      </header>
+    <div className="shell">
+      <AppHeader />
       <main className="shell-main">
-        <h1>Goals</h1>
+        <div className="page-intro">
+          <h1>Goals</h1>
+          <p>Keep your habits connected to meaningful outcomes.</p>
+        </div>
+
         {pageError && (
-          <p role="alert" className="form-error">
-            {pageError}
+          <p role="alert" className="alert alert-error">
+            <AlertIcon size={16} />
+            <span>{pageError}</span>
           </p>
         )}
-        {notice && <p className="form-notice">{notice}</p>}
+        {notice && (
+          <p role="status" className="alert alert-success">
+            <CheckIcon size={16} />
+            <span>{notice}</span>
+          </p>
+        )}
 
         {habits.length === 0 ? (
-          <section className="create-section">
-            <p className="empty">
-              You need a habit before you can create a goal — every goal links to one habit.{" "}
-              <Link to="/">Create a habit on the dashboard</Link>.
-            </p>
-          </section>
+          <div className="empty-state">
+            <TargetIcon size={36} />
+            <h3>Create a habit before adding a goal</h3>
+            <p>Every goal links to one of your habits, so start there.</p>
+            <Link to="/" className="btn btn-primary">
+              Go to Dashboard
+            </Link>
+          </div>
         ) : (
           <section className="create-section">
             <h2>Create a goal</h2>
-            <form onSubmit={handleCreate} className="create-form">
+            <p className="section-sub">Link your intention to a habit you&apos;re already shaping.</p>
+            <form onSubmit={handleCreate} className="card create-panel">
               <div className="field">
                 <label htmlFor="goal-title">Title</label>
                 <input
@@ -174,6 +172,7 @@ export default function GoalsPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={200}
+                  placeholder="e.g. Meditate daily for a calmer mind"
                   required
                 />
               </div>
@@ -206,27 +205,39 @@ export default function GoalsPage() {
                 </select>
               </div>
               {createError && (
-                <p role="alert" className="form-error">
-                  {createError}
+                <p role="alert" className="alert alert-error">
+                  <AlertIcon size={16} />
+                  <span>{createError}</span>
                 </p>
               )}
-              <button type="submit" className="btn-primary" disabled={creating}>
-                {creating ? "Creating…" : "Create goal"}
-              </button>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary" disabled={creating}>
+                  {creating ? "Creating…" : "Create goal"}
+                </button>
+              </div>
             </form>
           </section>
         )}
 
-        <section>
-          <h2>Your goals</h2>
+        <section className="section-block">
+          <div className="section-head">
+            <h2>Your goals</h2>
+            <span className="section-sub">
+              {goals.length} {goals.length === 1 ? "goal" : "goals"}
+            </span>
+          </div>
           {goals.length === 0 ? (
-            <p className="empty">No goals yet.</p>
+            <div className="empty-state">
+              <TargetIcon size={36} />
+              <h3>No goals yet</h3>
+              <p>Connect a goal to one of your habits to keep your intention visible.</p>
+            </div>
           ) : (
             <ul className="goal-list">
               {goals.map((g) =>
                 editingId === g.id ? (
-                  <li key={g.id} className="goal-card">
-                    <form onSubmit={handleSaveEdit} className="create-form">
+                  <li key={g.id} className="card goal-card">
+                    <form onSubmit={handleSaveEdit} className="goal-edit-form">
                       <div className="field">
                         <label htmlFor={`goal-edit-title-${g.id}`}>Title</label>
                         <input
@@ -264,31 +275,27 @@ export default function GoalsPage() {
                         </select>
                       </div>
                       {editError && (
-                        <p role="alert" className="form-error">
-                          {editError}
+                        <p role="alert" className="alert alert-error">
+                          <AlertIcon size={16} />
+                          <span>{editError}</span>
                         </p>
                       )}
                       <div className="goal-actions">
-                        <button type="submit" className="btn-primary btn-small" disabled={savingEdit}>
+                        <button type="submit" className="btn btn-primary btn-sm" disabled={savingEdit}>
                           {savingEdit ? "Saving…" : "Save"}
                         </button>
-                        <button
-                          type="button"
-                          className="btn-ghost btn-small"
-                          disabled={savingEdit}
-                          onClick={() => setEditingId(null)}
-                        >
+                        <button type="button" className="btn btn-ghost btn-sm" disabled={savingEdit} onClick={() => setEditingId(null)}>
                           Cancel
                         </button>
                       </div>
                     </form>
                   </li>
                 ) : (
-                  <li key={g.id} className="goal-card">
+                  <li key={g.id} className="card goal-card">
                     <div className="goal-info">
                       <span className="goal-title">{g.title}</span>
                       <span className="goal-habit">
-                        <span className={`badge badge-${g.habit.type.toLowerCase()}`}>{g.habit.type}</span>{" "}
+                        <span className={`badge badge-${g.habit.type.toLowerCase()}`}>{g.habit.type}</span>
                         {g.habit.name}
                       </span>
                       {g.description && <span className="goal-desc">{g.description}</span>}
@@ -296,19 +303,19 @@ export default function GoalsPage() {
                     <div className="goal-actions">
                       <button
                         type="button"
-                        className="btn-ghost btn-small"
+                        className="btn btn-ghost btn-sm"
                         disabled={deletingId === g.id}
                         onClick={() => startEdit(g)}
                       >
-                        Edit
+                        <EditIcon size={14} /> Edit
                       </button>
                       <button
                         type="button"
-                        className="btn-danger btn-small"
+                        className="btn btn-destructive-ghost btn-sm"
                         disabled={deletingId === g.id}
                         onClick={() => void handleDelete(g)}
                       >
-                        {deletingId === g.id ? "…" : "Delete"}
+                        <TrashIcon size={14} /> {deletingId === g.id ? "Deleting…" : "Delete"}
                       </button>
                     </div>
                   </li>

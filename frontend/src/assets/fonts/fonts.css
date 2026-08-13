@@ -1,0 +1,65 @@
+/* Local font faces for the Verdana Health design system (no runtime CDN).
+   Files fetched once from Google Fonts (see fetch-fonts.sh + google-fonts-*.css
+   for traceability) and bundled by Vite ?url imports. Fallbacks stay readable. */
+
+/* ---- Plus Jakarta Sans (headlines) ---- */
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko50yyygA.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko40yyygA.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./LDIoaomQNQcsA88c7O9yZ4KMCoOg4Ko20yw.woff2") format("woff2");
+}
+
+/* ---- DM Sans (body) ---- */
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2") format("woff2");
+}
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2") format("woff2");
+}
+
+/* ---- Fira Code (tabular/metric values) ---- */
+@font-face {
+  font-family: "Fira Code";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./uU9NCBsR6Z2vfE9aq3bh09SDulI.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Fira Code";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./uU9NCBsR6Z2vfE9aq3bh0dSDulI.woff2") format("woff2");
+}

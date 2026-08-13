@@ -161,7 +161,7 @@ describe("Phase 7 auth flow", () => {
     installFetchStub(dashboardHandlers);
     renderApp("/");
     await screen.findByRole("heading", { name: /today's habits/i });
-    await userEvent.click(screen.getByRole("button", { name: /logout/i }));
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /welcome back/i })).toBeInTheDocument());
     expect(getStoredToken()).toBeNull();

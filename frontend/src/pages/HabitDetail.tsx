@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth, errorMessage } from "../context/AuthContext";
 import { getHabit, completeHabit, uncompleteHabit, recordRelapse, type HabitDetail } from "../api/habits";
+import AppHeader, { ArrowLeftIcon, FlameIcon, AlertIcon } from "../components/AppHeader";
 
 // Habit detail: stats + completion/relapse history (contract §2 GET /:id).
 // BUILD → completedDates (toggle on/off); BREAK → relapseDates (record only).
@@ -65,75 +66,88 @@ export default function HabitDetailPage() {
 
   if (error && !detail) {
     return (
-      <div className="shell-main">
-        <p role="alert" className="form-error">
-          {error}
-        </p>
-        <Link to="/">← Back to dashboard</Link>
+      <div className="shell">
+        <AppHeader />
+        <main className="shell-main">
+          <p role="alert" className="alert alert-error">
+            <AlertIcon size={16} />
+            <span>{error}</span>
+          </p>
+          <Link to="/">← Back to dashboard</Link>
+        </main>
       </div>
     );
   }
   if (!detail) {
-    return <div className="page-loading">Loading habit…</div>;
+    return (
+      <div className="shell">
+        <AppHeader />
+        <main className="shell-main">
+          <div className="page-loading">Loading habit…</div>
+        </main>
+      </div>
+    );
   }
 
   const s = detail.stats;
+  const pct = Math.round(((s.weekCompleted ?? 0) / (s.weekElapsedDays ?? 1)) * 100);
+
   return (
-    <div className="dashboard">
-      <header className="shell-header">
-        <span className="shell-brand">Habit Shaper</span>
-        <nav className="shell-nav">
-          <Link to="/" className="btn-ghost">
-            Dashboard
-          </Link>
-          <Link to="/goals" className="btn-ghost">
-            Goals
-          </Link>
-        </nav>
-        <Link to="/" className="btn-ghost">
-          ← Back
-        </Link>
-      </header>
+    <div className="shell">
+      <AppHeader />
       <main className="shell-main">
-        <h1>{detail.habit.name}</h1>
-        <p className="auth-sub">
-          <span className={`badge badge-${detail.habit.type.toLowerCase()}`}>{detail.habit.type}</span> since{" "}
-          {detail.habit.startDate}
-        </p>
+        <Link to="/" className="back-link">
+          <ArrowLeftIcon size={14} /> Dashboard
+        </Link>
+
+        <div className="detail-hero">
+          <div>
+            <h1>{detail.habit.name}</h1>
+            <div className="detail-meta">
+              <span className={`badge badge-${detail.habit.type.toLowerCase()}`}>{detail.habit.type}</span>
+              <span>Since {detail.habit.startDate}</span>
+            </div>
+          </div>
+        </div>
+
         {error && (
-          <p role="alert" className="form-error">
-            {error}
+          <p role="alert" className="alert alert-error">
+            <AlertIcon size={16} />
+            <span>{error}</span>
           </p>
         )}
+
         <section className="stats-panel">
-          {detail.habit.type === "BUILD" ? (
+          {isBuild ? (
             <>
-              <div className="stat">
-                <span className="stat-value">{s.currentStreak ?? 0}</span>
+              <div className="card stat">
+                <span className="stat-value">
+                  {s.currentStreak ?? 0} <FlameIcon size={16} />
+                </span>
                 <span className="stat-label">day streak</span>
               </div>
-              <div className="stat">
+              <div className="card stat">
                 <span className="stat-value">
                   {s.weekCompleted ?? 0}/{s.weekElapsedDays ?? 0}
                 </span>
                 <span className="stat-label">this week</span>
               </div>
-              <div className="stat">
+              <div className="card stat">
                 <span className="stat-value">{s.weekCompletionRate != null ? Math.round(s.weekCompletionRate * 100) : 0}%</span>
                 <span className="stat-label">completion rate</span>
               </div>
-              <div className="stat">
+              <div className="card stat">
                 <span className="stat-value">{s.missedDays ?? 0}</span>
                 <span className="stat-label">missed days</span>
               </div>
             </>
           ) : (
             <>
-              <div className="stat">
+              <div className="card stat">
                 <span className="stat-value">{s.cleanStreak ?? 0}</span>
                 <span className="stat-label">clean streak (days)</span>
               </div>
-              <div className="stat">
+              <div className="card stat">
                 <span className="stat-value">{s.lastRelapseDate ?? "—"}</span>
                 <span className="stat-label">last relapse</span>
               </div>
@@ -141,10 +155,31 @@ export default function HabitDetailPage() {
           )}
         </section>
 
-        <section>
+        {isBuild && (
+          <section className="section-block">
+            <h2>This week</h2>
+            <div className="card" style={{ padding: "var(--space-4)" }}>
+              <div className="week-progress">
+                <span className="week-progress-track">
+                  <span className="week-progress-fill" style={{ width: `${Math.min(pct, 100)}%` }} />
+                </span>
+                <span className="week-progress-label">
+                  {s.weekCompleted ?? 0}/{s.weekElapsedDays ?? 0} completed
+                </span>
+              </div>
+              <p className="helper" style={{ marginTop: "var(--space-3)", marginBottom: 0 }}>
+                {pct}% completion rate · {s.missedDays ?? 0} day{s.missedDays === 1 ? "" : "s"} missed
+              </p>
+            </div>
+          </section>
+        )}
+
+        <section className="section-block">
           <h2>{isBuild ? "Completed dates" : "Relapse dates"}</h2>
           {dates.length === 0 ? (
-            <p className="empty">No {isBuild ? "completions" : "relapses"} yet.</p>
+            <p className="empty-state" style={{ textAlign: "center", padding: "var(--space-5)" }}>
+              No {isBuild ? "completions" : "relapses"} yet.
+            </p>
           ) : (
             <ul className="date-list">
               {dates.map((d) => (
@@ -153,7 +188,7 @@ export default function HabitDetailPage() {
                   {isBuild ? (
                     <button
                       type="button"
-                      className="btn-ghost btn-small"
+                      className="btn btn-ghost btn-sm"
                       disabled={busyDate === d}
                       onClick={() => void toggleDate(d)}
                     >
@@ -162,7 +197,7 @@ export default function HabitDetailPage() {
                   ) : (
                     <button
                       type="button"
-                      className="btn-danger btn-small"
+                      className="btn btn-danger btn-sm"
                       disabled={busyDate === d}
                       onClick={() => void relapseOn(d)}
                     >
