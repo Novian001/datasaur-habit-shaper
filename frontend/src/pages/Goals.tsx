@@ -244,6 +244,21 @@ export default function GoalsPage() {
   }
 
   if (goals === null) {
+    // No goals loaded yet. If the fetch failed, show the error instead of
+    // the loading screen — never stuck on "Loading goals…" forever.
+    if (pageError !== null) {
+      return (
+        <div className="shell">
+          <AppHeader />
+          <main className="shell-main">
+            <p role="alert" className="alert alert-error">
+              <AlertIcon size={16} />
+              <span>{pageError}</span>
+            </p>
+          </main>
+        </div>
+      );
+    }
     return (
       <div className="shell">
         <AppHeader />

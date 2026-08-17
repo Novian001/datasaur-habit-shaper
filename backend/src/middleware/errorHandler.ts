@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { ApiError } from "../lib/errors.js";
+import { ApiError, badRequest } from "../lib/errors.js";
 
 // Central error handler — consistent { error: { code, message } } shape (architecture §9).
 // Never leaks stack traces, Prisma internals, or SQL to the client.
@@ -19,6 +19,12 @@ export function errorHandler(
     res.status(400).json({
       error: { code: "VALIDATION_ERROR", message: first?.message ?? "Invalid input" },
     });
+    return;
+  }
+  // Malformed JSON body (body-parser SyntaxError): a client input error → 400,
+  // never the generic 500. No stack trace leak (ApiError path only sends the message).
+  if (err instanceof SyntaxError && "status" in err && (err as { status?: number }).status === 400) {
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Malformed JSON body" } });
     return;
   }
   // Unknown error: log server-side (with stack), return generic 500.
