@@ -7,7 +7,9 @@ to habits. Full-stack TypeScript, dockerized.
 ## Features
 
 - **Auth** — email + password registration/login, JWT bearer, protected routes
-- **Habits** — create BUILD (build a habit) and BREAK (quit a habit) habits
+- **Habits** — create BUILD (build a habit) and BREAK (quit a habit) habits;
+  BUILD habits support daily tracking or flexible N-times-per-week tracking
+  (1–7 per week, any day pattern)
 - **Tracking** — daily completion/undo (BUILD), relapse (BREAK), browser-local
   calendar dates (no server-clock dependence)
 - **Stats** — current streak, weekly completed/missed/rate, clean streak, last
@@ -61,7 +63,7 @@ docker compose up -d     # fresh database
 
 - **Backend** (Vitest + Supertest, real Express + test MySQL):
   `docker compose -f compose.yml -f compose.test.yml run --rm backend-test`
-  → 118/118 PASS
+  → 138/138 PASS
 - **Frontend** (Vitest + jsdom + Testing Library): `cd frontend && npm test`
   → 47/47 PASS; `npx tsc --noEmit` clean; `npm run build` OK
 - **E2E smoke** (through nginx :3000): `bash hermes-verify-phase9-e2e.sh`
