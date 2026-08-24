@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import type { HabitInput } from "../lib/validation.js";
+import { badRequest } from "../lib/errors.js";
 import type { FrequencyType } from "../generated/prisma/enums.js";
 
 // Safe habit shape returned to clients. Includes frequencyType + weeklyTarget
@@ -26,6 +27,12 @@ export function toSafeHabit(habit: {
 
 // Ownership is always the authenticated userId — never client-supplied (STEP 2/10).
 export async function createHabit(userId: number, input: HabitInput) {
+  if (
+    input.type === "BREAK" &&
+    input.frequency?.type === "TIMES_PER_WEEK"
+  ) {
+    throw badRequest("BREAK habits cannot use TIMES_PER_WEEK frequency");
+  }
   return prisma.habit.create({
     data: {
       userId,

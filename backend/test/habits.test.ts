@@ -191,3 +191,27 @@ describe("habits startDate (D8 local-calendar boundary)", () => {
     expect(await prisma.habit.count()).toBe(0);
   });
 });
+
+describe("habits frequency", () => {
+  let token: string;
+  beforeEach(async () => {
+    token = await registerUser("freq@example.invalid");
+  });
+
+  it("19. BREAK + TIMES_PER_WEEK → 400 VALIDATION_ERROR, no DB row", async () => {
+    const res = await request(app)
+      .post("/api/habits")
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Smoking", type: "BREAK", startDate: START, frequency: { type: "TIMES_PER_WEEK", target: 3 } });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    expect(await prisma.habit.count()).toBe(0);
+  });
+
+  it("20. BREAK with no frequency → 201 (existing behavior preserved)", async () => {
+    const res = await createHabit(token, "Drinking", "BREAK");
+    expect(res.status).toBe(201);
+    expect(res.body.habit.type).toBe("BREAK");
+    expect(res.body.habit.frequencyType).toBe("DAILY");
+  });
+});
