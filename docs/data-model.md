@@ -39,19 +39,29 @@ habit counts grow to thousands of rows per habit (out of scope).
 
 ### habits
 
-| Column | Type | Constraints |
-|---|---|---|
+|| Column | Type | Constraints ||
+|---|---|---|---|
 | id | INT UNSIGNED | PK, AUTO_INCREMENT |
 | user_id | INT UNSIGNED | NOT NULL, **FK → users.id, ON DELETE CASCADE** |
 | name | VARCHAR(120) | NOT NULL |
 | type | ENUM('BUILD','BREAK') | NOT NULL |
+| frequency_type | ENUM('DAILY','TIMES_PER_WEEK') | NOT NULL, DEFAULT 'DAILY' |
+| weekly_target | TINYINT UNSIGNED | NULL — 1..7 for TIMES_PER_WEEK; null for DAILY |
 | start_date | DATE | NOT NULL |
 | created_at | DATETIME(3) | NOT NULL, DEFAULT now |
 
+- **`frequency_type`** (default `DAILY`) determines how BUILD habits are tracked:
+  - `DAILY` — one completion per calendar day (original behavior).
+  - `TIMES_PER_WEEK` — N completions per week (any days; no weekday restriction).
+- **`weekly_target`** (1..7, nullable): required when `frequency_type = TIMES_PER_WEEK`; must be `NULL` for `DAILY` (application-level enforcement).
+  Enforcement is at the application layer (validation schema) — Prisma handles the ENUM; range is enforced by Zod.
 - **`start_date`** is the business calendar boundary: the client's local
   calendar date when the habit began (D8). Distinct from `created_at` (audit
   timestamp) — `created_at` is never converted to a calendar date
   (human-review correction 2026-08-12).
+- **BREAK habits** ignore `frequency_type` internally; they always use the
+  relapse-event model (D4). Setting BREAK to TIMES_PER_WEEK is rejected at
+  creation time.
 - **Index:** `(user_id)` — every access path filters by owner first.
 - Ownership enforced structurally (FK) and by query scoping (all reads/writes
   filter `user_id = req.userId`).

@@ -23,16 +23,19 @@ model User {
 }
 
 model Habit {
-  id        Int       @id @default(autoincrement()) @db.UnsignedInt
-  userId    Int       @map("user_id") @db.UnsignedInt
-  name      String    @db.VarChar(120)
-  type      HabitType
+  id            Int           @id @default(autoincrement()) @db.UnsignedInt
+  userId        Int           @map("user_id") @db.UnsignedInt
+  name          String        @db.VarChar(120)
+  type          HabitType
+  frequencyType FrequencyType @default(DAILY) @map("frequency_type")
+  // 1–7 for TIMES_PER_WEEK; null for DAILY. Enforced at application layer.
+  weeklyTarget  Int?          @map("weekly_target") @db.UnsignedTinyInt
   // Business calendar boundary: the client's local calendar date when the
   // habit was created (D8). An audit timestamp is NOT a calendar date.
   // Human-review correction 2026-08-12: createdAt was previously converted
   // through UTC for pre-creation validation, which shifted the calendar day.
-  startDate DateTime  @map("start_date") @db.Date
-  createdAt DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  startDate     DateTime      @map("start_date") @db.Date
+  createdAt     DateTime      @default(now()) @map("created_at") @db.DateTime(3)
 
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   completions   HabitCompletion[]
@@ -46,6 +49,11 @@ model Habit {
 enum HabitType {
   BUILD
   BREAK
+}
+
+enum FrequencyType {
+  DAILY
+  TIMES_PER_WEEK
 }
 
 model HabitCompletion {

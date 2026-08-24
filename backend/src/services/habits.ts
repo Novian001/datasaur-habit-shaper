@@ -1,14 +1,15 @@
 import { prisma } from "../lib/prisma.js";
 import type { HabitInput } from "../lib/validation.js";
+import type { FrequencyType } from "../generated/prisma/enums.js";
 
-// Safe habit shape — the only habit representation returned to clients.
-// No stats yet (Phase 5); includes type so later phases can branch on it.
-// startDate is the client-supplied local calendar boundary (D8, human-review
-// correction 2026-08-12); createdAt is a plain audit timestamp.
+// Safe habit shape returned to clients. Includes frequencyType + weeklyTarget
+// so callers can branch on DAILY vs TIMES_PER_WEEK (S11).
 export function toSafeHabit(habit: {
   id: number;
   name: string;
   type: "BUILD" | "BREAK";
+  frequencyType: FrequencyType;
+  weeklyTarget: number | null;
   startDate: Date;
   createdAt: Date;
 }) {
@@ -16,6 +17,8 @@ export function toSafeHabit(habit: {
     id: habit.id,
     name: habit.name,
     type: habit.type,
+    frequencyType: habit.frequencyType,
+    weeklyTarget: habit.weeklyTarget,
     startDate: habit.startDate.toISOString().slice(0, 10),
     createdAt: habit.createdAt.toISOString(),
   };
@@ -24,7 +27,15 @@ export function toSafeHabit(habit: {
 // Ownership is always the authenticated userId — never client-supplied (STEP 2/10).
 export async function createHabit(userId: number, input: HabitInput) {
   return prisma.habit.create({
-    data: { userId, name: input.name, type: input.type, startDate: new Date(input.startDate + "T00:00:00.000Z") },
+    data: {
+      userId,
+      name: input.name,
+      type: input.type,
+      // Default to DAILY; TIMES_PER_WEEK requires target from frequency block.
+      frequencyType: input.frequency?.type ?? "DAILY",
+      weeklyTarget: input.frequency?.type === "TIMES_PER_WEEK" ? input.frequency.target ?? null : null,
+      startDate: new Date(input.startDate + "T00:00:00.000Z"),
+    },
   });
 }
 

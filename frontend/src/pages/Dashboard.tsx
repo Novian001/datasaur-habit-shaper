@@ -9,16 +9,17 @@ import {
   recordRelapse,
   type Habit,
   type HabitType,
+  type FrequencyType,
 } from "../api/habits";
 import AppHeader, { CheckIcon, FlameIcon, AlertIcon, TargetIcon } from "../components/AppHeader";
 import Modal from "../components/Modal";
 
 // Dashboard: habit list + daily completion (BUILD) and relapse (BREAK)
 // buttons (contract §2–§4). Dates are the browser's local calendar date
-// (D8). "Add habit" opens the create form in a modal (post-redesign UX).
+// (D8). "Add habit" opens the create form in a modal.
 
-// Create-habit modal: existing create form (name/type/start date) inside a
-// lightweight dialog — same API contract, no new fields, Verdana styling.
+// Create-habit modal: name/type/frequency/startDate inside a lightweight
+// dialog. Frequency selector only shown for BUILD habits (S15).
 function CreateHabitModal({
   open,
   creating,
@@ -32,34 +33,40 @@ function CreateHabitModal({
   createError: string | null;
   onOpen: () => void;
   onClose: () => void;
-  onCreate: (name: string, type: HabitType, startDate: string) => void;
+  onCreate: (name: string, type: HabitType, startDate: string, frequency?: { type: FrequencyType; target?: number }) => void;
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<HabitType>("BUILD");
+  const [frequencyType, setFrequencyType] = useState<FrequencyType>("DAILY");
+  const [weeklyTarget, setWeeklyTarget] = useState(3);
   const [startDate, setStartDate] = useState(todayLocal());
   const nameRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Reset the form on close so the next open is fresh.
   useEffect(() => {
     if (!open) {
       setName("");
       setType("BUILD");
+      setFrequencyType("DAILY");
+      setWeeklyTarget(3);
       setStartDate(todayLocal());
     } else {
-      // Focus the first field when opened (the shell also focuses the
-      // dialog as a fallback; the field focus wins for direct entry).
       nameRef.current?.focus();
     }
   }, [open]);
 
+  // Frequency controls only shown for BUILD type.
+  const showFrequency = type === "BUILD";
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    // Backdating guard: a new habit must not start before the user's local
-    // calendar today (future planning is allowed). Never submit a past date.
+    // Backdating guard: startDate must be today or future.
     if (startDate && startDate < todayLocal()) return;
-    onCreate(name.trim(), type, startDate);
+    const frequency = showFrequency && frequencyType === "TIMES_PER_WEEK"
+      ? { type: frequencyType as FrequencyType, target: weeklyTarget }
+      : undefined;
+    onCreate(name.trim(), type, startDate, frequency);
   }
 
   return (
@@ -104,6 +111,36 @@ function CreateHabitModal({
               <option value="BREAK">BREAK — stop doing this</option>
             </select>
           </div>
+          {showFrequency && (
+            <>
+              <div className="field">
+                <label htmlFor="habit-frequency">Frequency</label>
+                <select
+                  id="habit-frequency"
+                  value={frequencyType}
+                  onChange={(e) => setFrequencyType(e.target.value as FrequencyType)}
+                >
+                  <option value="DAILY">Every day</option>
+                  <option value="TIMES_PER_WEEK">Times per week</option>
+                </select>
+              </div>
+              {frequencyType === "TIMES_PER_WEEK" && (
+                <div className="field">
+                  <label htmlFor="habit-target">Target</label>
+                  <input
+                    id="habit-target"
+                    type="number"
+                    min={1}
+                    max={7}
+                    value={weeklyTarget}
+                    onChange={(e) => setWeeklyTarget(Math.min(7, Math.max(1, Number(e.target.value))))}
+                    required
+                  />
+                  <p className="helper">times per week (1–7)</p>
+                </div>
+              )}
+            </>
+          )}
           <div className="field">
             <label htmlFor="habit-start">Start date</label>
             <input
@@ -165,12 +202,12 @@ export default function Dashboard() {
     void load();
   }, [load]);
 
-  async function handleCreate(name: string, type: HabitType, startDate: string) {
+  async function handleCreate(name: string, type: HabitType, startDate: string, frequency?: { type: FrequencyType; target?: number }) {
     if (!token || !name) return;
     setCreating(true);
     setCreateError(null);
     try {
-      await createHabit(token, { name, type, startDate });
+      await createHabit(token, { name, type, startDate, ...(frequency ? { frequency } : {}) });
       setModalOpen(false);
       await load();
       setNotice(`Created ${type.toLowerCase()} habit.`);
@@ -182,8 +219,6 @@ export default function Dashboard() {
   }
 
   const today = todayLocal();
-  // A habit whose startDate is in the future hasn't started yet: show a
-  // "Starts …" state instead of a streak, and disable its tracking action.
   const notStarted = (h: Habit) => h.startDate > today;
 
   async function handleToggleComplete(habit: Habit, date: string) {
@@ -215,8 +250,6 @@ export default function Dashboard() {
   }
 
   if (habits === null) {
-    // No habits loaded yet. If the fetch failed, show the error instead of
-    // the loading screen — never stuck on "Loading your habits…" forever.
     if (error !== null) {
       return (
         <div className="shell">
@@ -243,7 +276,7 @@ export default function Dashboard() {
   const buildCount = habits.filter((h) => h.type === "BUILD").length;
   const breakCount = habits.length - buildCount;
   const todayDone = habits.filter(
-    (h) => h.type === "BUILD" && (h.stats.weekCompleted ?? 0) > 0 && h.stats.currentStreak !== undefined,
+    (h) => h.type === "BUILD" && h.stats.weeklyCompleted != null && h.stats.weeklyCompleted > 0,
   ).length;
 
   return (
@@ -300,99 +333,140 @@ export default function Dashboard() {
             </div>
 
             <ul className="habit-list">
-              {habits.map((h) => (
-                <li key={h.id} className="card habit-card">
-                  <div className="habit-head">
-                    <div className="habit-title-row">
-                      <Link to={`/habits/${h.id}`} className="habit-title">
-                        {h.name}
-                      </Link>
-                      <span className={`badge badge-${h.type.toLowerCase()}`}>{h.type}</span>
-                    </div>
-                    <span className="habit-meta">Since {h.startDate}</span>
+              {habits.map((h) => {
+                const isTPW = h.frequencyType === "TIMES_PER_WEEK";
+                const isBuild = h.type === "BUILD";
 
-                    {notStarted(h) ? (
-                      <div className="habit-metric">
-                        <span className="habit-metric-value">—</span>
-                        <span className="habit-metric-label">Starts {h.startDate}</span>
+                return (
+                  <li key={h.id} className="card habit-card">
+                    <div className="habit-head">
+                      <div className="habit-title-row">
+                        <Link to={`/habits/${h.id}`} className="habit-title">
+                          {h.name}
+                        </Link>
+                        <span className={`badge badge-${h.type.toLowerCase()}`}>{h.type}</span>
                       </div>
-                    ) : h.type === "BUILD" ? (
-                      <div className="habit-metric">
-                        <span className="habit-metric-value">{h.stats.currentStreak ?? 0}</span>
-                        <span className="habit-metric-label">
-                          day streak <FlameIcon size={14} />
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="habit-metric">
-                        <span className="habit-metric-value">{h.stats.cleanStreak ?? 0}</span>
-                        <span className="habit-metric-label">clean days</span>
-                      </div>
-                    )}
-                  </div>
+                      <span className="habit-meta">Since {h.startDate}</span>
 
-                  <div className="habit-foot">
-                    {h.type === "BUILD" ? (
-                      <>
-                        <div className="week-progress">
-                          <span className="week-progress-track">
-                            <span
-                              className="week-progress-fill"
-                              style={{
-                                width: `${Math.round(((h.stats.weekCompleted ?? 0) / (h.stats.weekElapsedDays ?? 1)) * 100)}%`,
-                              }}
-                            />
+                      {notStarted(h) ? (
+                        <div className="habit-metric">
+                          <span className="habit-metric-value">—</span>
+                          <span className="habit-metric-label">Starts {h.startDate}</span>
+                        </div>
+                      ) : isBuild ? (
+                        <div className="habit-metric">
+                          <span className="habit-metric-value">
+                            {isTPW ? (h.stats.weeklyStreak ?? 0) : (h.stats.currentStreak ?? 0)}
                           </span>
-                          <span className="week-progress-label">
-                            {h.stats.weekCompleted ?? 0}/{h.stats.weekElapsedDays ?? 0}
+                          <span className="habit-metric-label">
+                            {isTPW ? "week streak" : "day streak"} <FlameIcon size={14} />
                           </span>
                         </div>
+                      ) : (
+                        <div className="habit-metric">
+                          <span className="habit-metric-value">{h.stats.cleanStreak ?? 0}</span>
+                          <span className="habit-metric-label">clean days</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="habit-foot">
+                      {isBuild ? (
+                        isTPW ? (
+                          <>
+                            {h.weeklyTarget != null && (
+                              <div className="habit-footline">
+                                <span className="foot-item">
+                                  <strong>{h.weeklyTarget}x</strong> per week
+                                </span>
+                              </div>
+                            )}
+                            <div className="week-progress">
+                              <span className="week-progress-track">
+                                <span
+                                  className="week-progress-fill"
+                                  style={{
+                                    width: `${Math.round((h.stats.weeklyCompletionRate ?? 0) * 100)}%`,
+                                  }}
+                                />
+                              </span>
+                              <span className="week-progress-label">
+                                {h.stats.weeklyCompleted ?? 0}/{h.stats.weeklyTarget ?? 0}
+                              </span>
+                            </div>
+                            <div className="habit-footline">
+                              <span className="foot-item">
+                                {h.stats.weeklyRemaining
+                                  ? `${h.stats.weeklyRemaining} remaining`
+                                  : h.stats.weeklyGoalReached
+                                    ? "Weekly goal reached ✓"
+                                    : `${h.stats.weeklyCompleted ?? 0}/${h.stats.weeklyTarget ?? 0} completed`}
+                              </span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="week-progress">
+                              <span className="week-progress-track">
+                                <span
+                                  className="week-progress-fill"
+                                  style={{
+                                    width: `${Math.round(((h.stats.weekCompleted ?? 0) / (h.stats.weekElapsedDays ?? 1)) * 100)}%`,
+                                  }}
+                                />
+                              </span>
+                              <span className="week-progress-label">
+                                {h.stats.weekCompleted ?? 0}/{h.stats.weekElapsedDays ?? 0}
+                              </span>
+                            </div>
+                            <div className="habit-footline">
+                              <span className="foot-item">
+                                Week: <strong>{h.stats.weekCompleted ?? 0}/{h.stats.weekElapsedDays ?? 0}</strong>
+                              </span>
+                              <span className="foot-item">
+                                Missed: <strong>{h.stats.missedDays ?? 0}</strong>
+                              </span>
+                            </div>
+                          </>
+                        )
+                      ) : (
                         <div className="habit-footline">
                           <span className="foot-item">
-                            Week: <strong>{h.stats.weekCompleted ?? 0}/{h.stats.weekElapsedDays ?? 0}</strong>
-                          </span>
-                          <span className="foot-item">
-                            Missed: <strong>{h.stats.missedDays ?? 0}</strong>
+                            Last relapse: <strong>{h.stats.lastRelapseDate ?? "—"}</strong>
                           </span>
                         </div>
-                      </>
-                    ) : (
-                      <div className="habit-footline">
-                        <span className="foot-item">
-                          Last relapse: <strong>{h.stats.lastRelapseDate ?? "—"}</strong>
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="habit-actions">
-                      {h.type === "BUILD" ? (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busyId === h.id || notStarted(h)}
-                          onClick={() => void handleToggleComplete(h, today)}
-                        >
-                          <CheckIcon size={14} />{" "}
-                          {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Complete today"}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          disabled={busyId === h.id || notStarted(h)}
-                          onClick={() => void handleRelapse(h, today)}
-                        >
-                          <FlameIcon size={14} />{" "}
-                          {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Record relapse"}
-                        </button>
                       )}
-                      <Link to={`/habits/${h.id}`} className="btn btn-secondary btn-sm">
-                        View details
-                      </Link>
+
+                      <div className="habit-actions">
+                        {isBuild ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={busyId === h.id || notStarted(h)}
+                            onClick={() => void handleToggleComplete(h, today)}
+                          >
+                            <CheckIcon size={14} />{" "}
+                            {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Complete today"}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            disabled={busyId === h.id || notStarted(h)}
+                            onClick={() => void handleRelapse(h, today)}
+                          >
+                            <FlameIcon size={14} />{" "}
+                            {busyId === h.id ? "Saving…" : notStarted(h) ? "Not started" : "Record relapse"}
+                          </button>
+                        )}
+                        <Link to={`/habits/${h.id}`} className="btn btn-secondary btn-sm">
+                          View details
+                        </Link>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}

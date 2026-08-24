@@ -33,3 +33,30 @@ export function mondayOfWeek(date: string): string {
   const daysSinceMonday = (dayNum + 6) % 7;
   return shiftDate(date, -daysSinceMonday);
 }
+
+// Sunday of the week containing `date` (last day of the Mon-Sun week).
+export function sundayOfWeek(date: string): string {
+  return shiftDate(mondayOfWeek(date), 6);
+}
+
+// True when the Monday-Sunday week containing `date` is fully past with
+// respect to `refDate`. Used to determine if a week has "closed".
+// ponytail: single-line helper for the current-week rule.
+export function weekIsComplete(date: string, refDate: string): boolean {
+  return sundayOfWeek(date) <= refDate;
+}
+
+// Count of calendar days from startDate through the Sunday of the first
+// partial week (the week containing startDate). Used to determine if the
+// first week is streak-eligible for TIMES_PER_WEEK.
+export function daysInFirstWeek(startDate: string): number {
+  const firstSunday = sundayOfWeek(startDate);
+  return dayDiff(startDate, firstSunday) + 1;
+}
+
+// Absolute difference in days between two calendar dates. Pure arithmetic.
+export function dayDiff(a: string, b: string): number {
+  const dayNum = (d: string) =>
+    Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) / 86_400_000;
+  return Math.abs(dayNum(a) - dayNum(b));
+}

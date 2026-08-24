@@ -25,14 +25,35 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+// Optional frequency block for habit creation. Backward-compatible: existing
+// POST /api/habits calls without this field default to DAILY.
+const frequencySchema = z.object({
+  type: z.enum(["DAILY", "TIMES_PER_WEEK"], { message: "Frequency type must be DAILY or TIMES_PER_WEEK" }),
+  target: z.number().int().min(1).max(7).optional(),
+});
+
 // Habit: name 1–120 chars (api-contract.md), trimmed; type BUILD|BREAK only;
 // startDate = the user's local calendar date the habit begins (D8). Real-date
-// validity is checked by isValidDateString (lib/dates.ts).
-export const habitSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters"),
-  type: z.enum(["BUILD", "BREAK"], { message: "Type must be BUILD or BREAK" }),
-  startDate: z.string().min(1, "startDate is required"),
-});
+// validity is checked by isValidDateString (lib/dates.ts). Optional frequency
+// lets callers specify DAILY (default) or TIMES_PER_WEEK with a 1-7 weekly
+// target. BREAK habits silently ignore frequency (enforced at service layer).
+export const habitSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters"),
+    type: z.enum(["BUILD", "BREAK"], { message: "Type must be BUILD or BREAK" }),
+    startDate: z.string().min(1, "startDate is required"),
+    frequency: frequencySchema.optional(),
+  })
+  .refine(
+    (data) => {
+      // TIMES_PER_WEEK requires a target in 1-7.
+      if (data.frequency?.type === "TIMES_PER_WEEK") {
+        return data.frequency.target != null && data.frequency.target >= 1 && data.frequency.target <= 7;
+      }
+      return true;
+    },
+    { message: "TIMES_PER_WEEK requires target as integer 1-7", path: ["frequency", "target"] },
+  );
 
 // Goal (api-contract.md §5): title 1–200, description ≤ 1000 optional
 // (null/undefined = no description). habitId is validated for ownership in

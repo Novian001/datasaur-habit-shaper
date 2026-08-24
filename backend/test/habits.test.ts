@@ -160,13 +160,13 @@ describe("habits data safety", () => {
     const created = await createHabit(token, "Safe", "BUILD");
     const id = created.body.habit.id;
     for (const res of [created, await request(app).get(`/api/habits/${id}?refDate=${REF}`).set("Authorization", `Bearer ${token}`)]) {
-      expect(Object.keys(res.body.habit).sort()).toEqual(["createdAt", "id", "name", "startDate", "type"]);
+      expect(Object.keys(res.body.habit).sort()).toEqual(["createdAt","frequencyType","id","name","startDate","type","weeklyTarget"]);
       expect(JSON.stringify(res.body)).not.toContain("userId");
       expect(JSON.stringify(res.body)).not.toContain("password");
     }
     const list = await request(app).get(`/api/habits?refDate=${REF}`).set("Authorization", `Bearer ${token}`);
     // List items carry computed stats per contract §2 (habit fields + stats).
-    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt", "id", "name", "startDate", "stats", "type"]);
+    expect(Object.keys(list.body.habits[0]).sort()).toEqual(["createdAt","frequencyType","id","name","startDate","stats","type","weeklyTarget"]);
   });
 });
 

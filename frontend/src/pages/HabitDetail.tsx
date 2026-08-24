@@ -6,6 +6,7 @@ import AppHeader, { ArrowLeftIcon, FlameIcon, AlertIcon } from "../components/Ap
 
 // Habit detail: stats + completion/relapse history (contract §2 GET /:id).
 // BUILD → completedDates (toggle on/off); BREAK → relapseDates (record only).
+// TIMES_PER_WEEK BUILD shows weekly stats; DAILY BUILD shows daily stats (S17).
 export default function HabitDetailPage() {
   const { token } = useAuth();
   const { id } = useParams();
@@ -28,6 +29,7 @@ export default function HabitDetailPage() {
   }, [load]);
 
   const isBuild = detail?.habit.type === "BUILD";
+  const isTPW = detail?.habit.frequencyType === "TIMES_PER_WEEK";
   const dates = isBuild ? detail?.completedDates ?? [] : detail?.relapseDates ?? [];
 
   async function toggleDate(date: string) {
@@ -90,7 +92,6 @@ export default function HabitDetailPage() {
   }
 
   const s = detail.stats;
-  const pct = Math.round(((s.weekCompleted ?? 0) / (s.weekElapsedDays ?? 1)) * 100);
 
   return (
     <div className="shell">
@@ -105,6 +106,9 @@ export default function HabitDetailPage() {
             <h1>{detail.habit.name}</h1>
             <div className="detail-meta">
               <span className={`badge badge-${detail.habit.type.toLowerCase()}`}>{detail.habit.type}</span>
+              {isTPW && detail.habit.weeklyTarget != null && (
+                <span>{detail.habit.weeklyTarget}× per week</span>
+              )}
               <span>Since {detail.habit.startDate}</span>
             </div>
           </div>
@@ -118,7 +122,32 @@ export default function HabitDetailPage() {
         )}
 
         <section className="stats-panel">
-          {isBuild ? (
+          {isBuild ? isTPW ? (
+            <>
+              <div className="card stat">
+                <span className="stat-value">
+                  {s.weeklyStreak ?? 0} <FlameIcon size={16} />
+                </span>
+                <span className="stat-label">week streak</span>
+              </div>
+              <div className="card stat">
+                <span className="stat-value">
+                  {s.weeklyCompleted ?? 0}/{s.weeklyTarget ?? 0}
+                </span>
+                <span className="stat-label">this week</span>
+              </div>
+              <div className="card stat">
+                <span className="stat-value">{s.weeklyRemaining ?? (s.weeklyGoalReached ? 0 : s.weeklyTarget ?? 0)}</span>
+                <span className="stat-label">remaining</span>
+              </div>
+              <div className="card stat">
+                <span className="stat-value">
+                  {s.weeklyGoalReached ? "Reached" : "In progress"}
+                </span>
+                <span className="stat-label">weekly goal</span>
+              </div>
+            </>
+          ) : (
             <>
               <div className="card stat">
                 <span className="stat-value">
@@ -159,17 +188,45 @@ export default function HabitDetailPage() {
           <section className="section-block">
             <h2>This week</h2>
             <div className="card" style={{ padding: "var(--space-4)" }}>
-              <div className="week-progress">
-                <span className="week-progress-track">
-                  <span className="week-progress-fill" style={{ width: `${Math.min(pct, 100)}%` }} />
-                </span>
-                <span className="week-progress-label">
-                  {s.weekCompleted ?? 0}/{s.weekElapsedDays ?? 0} completed
-                </span>
-              </div>
-              <p className="helper" style={{ marginTop: "var(--space-3)", marginBottom: 0 }}>
-                {pct}% completion rate · {s.missedDays ?? 0} day{s.missedDays === 1 ? "" : "s"} missed
-              </p>
+              {isTPW ? (
+                <>
+                  <div className="week-progress">
+                    <span className="week-progress-track">
+                      <span
+                        className="week-progress-fill"
+                        style={{ width: `${Math.round((s.weeklyCompletionRate ?? 0) * 100)}%` }}
+                      />
+                    </span>
+                    <span className="week-progress-label">
+                      {s.weeklyCompleted ?? 0}/{s.weeklyTarget ?? 0} completed
+                    </span>
+                  </div>
+                  <p className="helper" style={{ marginTop: "var(--space-3)", marginBottom: 0 }}>
+                    {Math.round((s.weeklyCompletionRate ?? 0) * 100)}% completion rate
+                    {s.weeklyRemaining ? ` · ${s.weeklyRemaining} remaining` : " · weekly goal reached"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="week-progress">
+                    <span className="week-progress-track">
+                      <span
+                        className="week-progress-fill"
+                        style={{
+                          width: `${Math.round(((s.weekCompleted ?? 0) / (s.weekElapsedDays ?? 1)) * 100)}%`,
+                        }}
+                      />
+                    </span>
+                    <span className="week-progress-label">
+                      {s.weekCompleted ?? 0}/{s.weekElapsedDays ?? 0} completed
+                    </span>
+                  </div>
+                  <p className="helper" style={{ marginTop: "var(--space-3)", marginBottom: 0 }}>
+                    {Math.round(((s.weekCompleted ?? 0) / (s.weekElapsedDays ?? 1)) * 100)}% completion rate
+                    {` · ${s.missedDays ?? 0} day${s.missedDays === 1 ? "" : "s"} missed`}
+                  </p>
+                </>
+              )}
             </div>
           </section>
         )}

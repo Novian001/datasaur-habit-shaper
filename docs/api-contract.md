@@ -70,6 +70,8 @@ current user's habits, each with computed stats:
       "id": 1,
       "name": "Meditate",
       "type": "BUILD",
+      "frequencyType": "DAILY",
+      "weeklyTarget": null,
       "createdAt": "...",
       "stats": {
         "currentStreak": 4,
@@ -77,6 +79,22 @@ current user's habits, each with computed stats:
         "weekElapsedDays": 4,
         "weekCompletionRate": 0.75,
         "missedDays": 1
+      }
+    },
+    {
+      "id": 2,
+      "name": "Gym",
+      "type": "BUILD",
+      "frequencyType": "TIMES_PER_WEEK",
+      "weeklyTarget": 3,
+      "createdAt": "...",
+      "stats": {
+        "weeklyStreak": 4,
+        "weeklyCompleted": 2,
+        "weeklyTarget": 3,
+        "weeklyRemaining": 1,
+        "weeklyGoalReached": false,
+        "weeklyCompletionRate": 0.667
       }
     }
   ]
@@ -86,26 +104,50 @@ BREAK habits return `{ "cleanStreak": 9, "lastRelapseDate": "..." | null }` inst
 
 ### POST /api/habits
 
-Auth: required. Body:
+Auth: required. Body — DAILY (backward-compatible, no frequency field):
 ```json
 { "name": "Meditate", "type": "BUILD", "startDate": "2026-08-12" }
 ```
-Validation: name 1–120 chars; type `BUILD`|`BREAK`; `startDate` required —
-the user's local calendar date the habit begins (D8). The frontend supplies it
-from the browser's local calendar (no manual picker needed). Success 201:
-habit object (with stats, as above), including `startDate`. Errors: 400 invalid; 401.
+Or TIMES_PER_WEEK (BUILD habits only):
+```json
+{
+  "name": "Gym",
+  "type": "BUILD",
+  "startDate": "2026-08-12",
+  "frequency": { "type": "TIMES_PER_WEEK", "target": 3 }
+}
+```
+Validation: name 1–120 chars; type `BUILD`|`BREAK`; `startDate` required;
+`frequency.type` `DAILY`|`TIMES_PER_WEEK` (optional, defaults to `DAILY`);
+`frequency.target` integer 1..7 (required when `frequency.type = TIMES_PER_WEEK`);
+`TIMES_PER_WEEK` is rejected for `type = BREAK`. Success 201 — habit object
+including `frequencyType` and `weeklyTarget` (null for DAILY). Errors: 400 invalid;
+401.
 
 ### GET /api/habits/:id?refDate=YYYY-MM-DD
 
-Auth: required; ownership scoped. `refDate` query param required (D8). Success 200: habit + stats + history:
+Auth: required; ownership scoped. `refDate` query param required (D8). Success 200:
 ```json
 {
-  "habit": { "id": 1, "name": "Meditate", "type": "BUILD", "createdAt": "..." },
-  "stats": { "currentStreak": 4, "weekCompleted": 3, "weekElapsedDays": 4,
-             "weekCompletionRate": 0.75, "missedDays": 1 },
+  "habit": {
+    "id": 1,
+    "name": "Meditate",
+    "type": "BUILD",
+    "frequencyType": "DAILY",
+    "weeklyTarget": null,
+    "createdAt": "..."
+  },
+  "stats": {
+    "currentStreak": 4,
+    "weekCompleted": 3,
+    "weekElapsedDays": 4,
+    "weekCompletionRate": 0.75,
+    "missedDays": 1
+  },
   "completedDates": ["2026-08-10", "2026-08-09", "2026-08-08"]
 }
 ```
+TIMES_PER_WEEK BUILD: `stats` returns `{ weeklyStreak, weeklyTarget, weeklyCompleted, weeklyRemaining, weeklyGoalReached, weeklyCompletionRate }` instead.
 BREAK variant: `stats: { "cleanStreak": 9, "lastRelapseDate": "..." | null }`,
 `relapseDates: ["2026-08-01"]`. Errors: 401; 404 not found / not owned.
 
