@@ -22,3 +22,7 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# hermes scratch
+.hermes-tmp.*/
+hermes-dbg-*.sh
